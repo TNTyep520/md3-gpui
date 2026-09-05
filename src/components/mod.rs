@@ -9,6 +9,7 @@ mod divider;
 mod fab;
 mod icon_button;
 mod list;
+mod navigation;
 mod progress;
 mod radio;
 mod slider;
@@ -25,6 +26,10 @@ pub use divider::Divider;
 pub use fab::{Fab, FabColor, FabSize, FabState};
 pub use icon_button::{IconButton, IconButtonState, IconButtonVariant};
 pub use list::{List, ListItem};
+pub use navigation::{
+    DrawerEntry, NavigationBar, NavigationBarState, NavigationDrawer, NavigationDrawerState,
+    NavigationItemSpec, NavigationRail, NavigationRailState, TopAppBar,
+};
 pub use progress::{CircularProgress, LinearProgress};
 pub use radio::{RadioButton, RadioState};
 pub use slider::{Slider, SliderState};

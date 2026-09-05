@@ -9,7 +9,6 @@ use gpui::{
 };
 use std::time::Duration;
 
-use crate::icon::IconName;
 use crate::theme::ActiveTheme;
 
 /// MD3 线性进度条
@@ -106,7 +105,7 @@ impl RenderOnce for CircularProgress {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let color = cx.theme().colors().primary;
         svg()
-            .path(IconName::ProgressArc.asset_path())
+            .path(crate::assets::PROGRESS_ARC_SVG_PATH)
             .size(self.size)
             .text_color(color)
             .with_animation(

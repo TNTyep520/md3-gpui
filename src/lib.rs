@@ -38,21 +38,32 @@
 
 pub mod assets;
 pub mod components;
+pub mod fonts;
 pub mod icon;
 pub mod interaction;
 pub mod motion;
 pub mod overlay;
+pub mod styles;
 pub mod theme;
 
 pub use assets::Md3Assets;
 pub use components::*;
-pub use icon::{Icon, IconName};
+pub use icon::{ICON_FONT_FAMILY, Icon, IconName};
 pub use theme::{ActiveTheme, Theme, ThemeMode};
 
 use gpui::App;
 
-/// 安装默认（亮色）主题。若已有主题则不覆盖。
+/// 注册内嵌字体（Roboto 三字重 + Material Symbols 图标子集）并安装
+/// 默认（亮色）主题。若已有主题则不覆盖。
+///
+/// 字体随库内置（woff2 子集化以控制体积），应用零字体代码；注册失败仅
+/// 记录不阻断启动。图标子集只含 [`crate::icon::IconName`] 内置图标——
+/// 需要 [`crate::icon::IconName::Custom`] 任意图标时，自行下载完整
+/// Material Symbols 字体并额外注册（生成方式见 README 字体章节）。
 pub fn init(cx: &mut App) {
+    if let Err(err) = fonts::install(cx) {
+        eprintln!("md3-gpui: failed to register embedded fonts: {err}");
+    }
     if !cx.has_global::<Theme>() {
         cx.set_global(Theme::light());
     }
@@ -62,6 +73,7 @@ pub fn init(cx: &mut App) {
 pub mod prelude {
     pub use crate::assets::Md3Assets;
     pub use crate::components::*;
+    pub use crate::fonts::{ICON_FONT_FAMILY, TEXT_FONT_FAMILY};
     pub use crate::icon::{Icon, IconName};
     pub use crate::motion::{
         Animatable, AnimatedComponent, AnimationDriver, Easing, MotionRole, MotionScheme,

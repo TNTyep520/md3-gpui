@@ -1,0 +1,82 @@
+name: Build Artifacts
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  RUSTFLAGS: -Zunstable-options -Cpanic=immediate-abort
+
+jobs:
+  build:
+    name: demo (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
+            experimental: true
+          # Linux
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+          # macOS
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Linux：gpui 的 x11/wayland 后端所需的系统依赖
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            libfontconfig-dev \
+            libasound2-dev \
+            libudev-dev
+
+      - name: Install Rust nightly with rust-src
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.target }}
+        # dtolnay/rust-toolchain@nightly 默认安装 rust-src 组件；
+        # 如需显式安装：
+        # run: rustup toolchain install nightly --component rust-src --target ${{ matrix.target }} && rustup default nightly
+
+      - name: Verify rust-src component
+        shell: bash
+        run: rustup component list --toolchain nightly --installed | grep rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build demo
+        shell: bash
+        run: >
+          cargo +nightly build --release --target ${{ matrix.target }} --example demo
+          -Z build-std=core
+          -Z build-std-features=default,optimize_for_size
+
+      - name: Upload demo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/examples/demo.exe
+          if-no-files-found: ignore

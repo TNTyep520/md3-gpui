@@ -1,7 +1,9 @@
 //! MD3 Switch（对应 material-web 的 `md-switch`）。
 //!
 //! 规格：轨道 52×32dp 胶囊形；未选中手柄 16dp（outline 色）、
-//! 选中手柄 24dp（on-primary 色），可选选中勾图标。
+//! 选中手柄 24dp（on-primary 色）。支持双图标样式（对齐 m3fx
+//! `M3SwitchSkin`）：选中/未选中各一个图标槽，拇指经过中点时
+//! 图标交叉淡化切换；提供图标时拇指恒为 24dp。
 //!
 //! 交互动画移植自 [m3fx](https://github.com/Glavo/m3fx) 的
 //! `M3SwitchSkin`（Apache-2.0，© 2026 Glavo）：手柄位置/尺寸与
@@ -12,6 +14,10 @@
 //!     .checked(true)
 //!     .on_change(|checked, _, _| println!("wifi: {checked}"))
 //!     .build(cx)   // -> Entity<SwitchState>
+//!
+//! // 带图标样式（选中/未选中各一图标，也可只给选中图标）
+//! Switch::new("power").selected_icon(IconName::Check)
+//!     .unselected_icon(Some(IconName::Close)).build(cx)
 //! ```
 
 use std::rc::Rc;
@@ -35,8 +41,10 @@ pub struct Switch {
     id: ElementId,
     checked: bool,
     disabled: bool,
-    /// 选中时在手柄内显示勾图标
-    show_icon: bool,
+    /// 选中态图标槽（对齐 m3fx `selectedIcon`）。
+    selected_icon: Option<IconName>,
+    /// 未选中态图标槽（对齐 m3fx `unselectedIcon`）。
+    unselected_icon: Option<IconName>,
     on_change: Option<ChangeHandler>,
 }
 
@@ -45,7 +53,8 @@ pub struct SwitchState {
     id: ElementId,
     checked: bool,
     disabled: bool,
-    show_icon: bool,
+    selected_icon: Option<IconName>,
+    unselected_icon: Option<IconName>,
     on_change: Option<ChangeHandler>,
     /// 0 = 未选中，1 = 选中。
     progress: Animatable,
@@ -59,7 +68,8 @@ impl Switch {
             id: id.into(),
             checked: false,
             disabled: false,
-            show_icon: false,
+            selected_icon: None,
+            unselected_icon: None,
             on_change: None,
         }
     }
@@ -76,9 +86,28 @@ impl Switch {
         self
     }
 
-    /// 选中时在手柄中显示勾选图标。
+    /// 选中态图标（显示在拇指内）。
+    pub fn selected_icon(mut self, icon: IconName) -> Self {
+        self.selected_icon = Some(icon);
+        self
+    }
+
+    /// 未选中态图标（`None` 则未选中时无图标）。
+    pub fn unselected_icon(mut self, icon: Option<IconName>) -> Self {
+        self.unselected_icon = icon;
+        self
+    }
+
+    /// 便捷方法：带图标样式（选中态显示勾图标）。
+    ///
+    /// 等价于 `selected_icon(IconName::Check)`；传 `false` 清除两个图标槽。
     pub fn show_icon(mut self, show: bool) -> Self {
-        self.show_icon = show;
+        if show {
+            self.selected_icon = Some(IconName::Check);
+        } else {
+            self.selected_icon = None;
+            self.unselected_icon = None;
+        }
         self
     }
 
@@ -95,7 +124,8 @@ impl Switch {
             id: self.id,
             checked,
             disabled: self.disabled,
-            show_icon: self.show_icon,
+            selected_icon: self.selected_icon,
+            unselected_icon: self.unselected_icon,
             on_change: self.on_change,
             progress: Animatable::new(if checked { 1.0 } else { 0.0 }, 1.0e-3),
             surface: InteractiveSurface::new(),
@@ -150,59 +180,72 @@ impl Render for SwitchState {
 
         let theme = cx.theme();
         let colors = theme.colors();
-        let tokens = theme.component().switch;
-        let state_layer = *theme.state_layer();
         let disabled = self.disabled;
+        let style = crate::styles::selection::SwitchStyle::resolve(theme.token_set(), disabled);
+        let state_layer = *theme.state_layer();
         let p = self.progress.value() as f32;
 
-        // 端点颜色随 disabled 变化，进度驱动插值
-        let (track_a, track_b, handle_a, handle_b, border_color) = if disabled {
-            (
-                colors
-                    .surface_container_highest
-                    .opacity(state_layer.disabled_container),
-                colors.on_surface.opacity(state_layer.disabled_container),
-                colors.on_surface.opacity(state_layer.disabled_content),
-                colors.surface,
-                Some(colors.on_surface.opacity(state_layer.disabled_content)),
-            )
-        } else {
-            (
-                colors.surface_container_highest,
-                colors.primary,
-                colors.outline,
-                colors.on_primary,
-                Some(colors.outline),
-            )
-        };
-        let track_bg = lerp_color(track_a, track_b, p);
-        let handle_bg = lerp_color(handle_a, handle_b, p);
+        let track_bg = lerp_color(style.track_off, style.track_on, p);
+        let handle_bg = lerp_color(style.handle_off, style.handle_on, p);
 
-        // 几何：手柄从 (6, 16dp) 移动到 (24, 24dp)
-        let thumb_size = px(tokens.unselected_thumb_size)
-            + (px(tokens.thumb_size) - px(tokens.unselected_thumb_size)) * p;
-        let thumb_x = px(6.) + (px(tokens.track_width - 4. - tokens.thumb_size) - px(6.)) * p;
-        let thumb_y = (px(tokens.track_height) - thumb_size) / 2.0;
+        // 几何：无图标时手柄 16dp -> 24dp；带图标时恒为 24dp
+        //（对齐 m3fx `withIconHandleSize`）
+        let (track_w_tok, track_h_tok) = (style.track_size.0, style.track_size.1);
+        let has_icons = self.selected_icon.is_some() || self.unselected_icon.is_some();
+        let thumb_size = if has_icons {
+            style.thumb_on
+        } else {
+            style.thumb_off + (style.thumb_on - style.thumb_off) * p
+        };
+        let x_start = if has_icons {
+            style.thumb_margin.1
+        } else {
+            style.thumb_margin.0
+        };
+        let thumb_x = x_start + (track_w_tok - px(4.) - style.thumb_on - x_start) * p;
+        let thumb_y = (track_h_tok - thumb_size) / 2.0;
 
         // 描边随选中淡出
         let border_alpha = (1.0 - p * 2.0).clamp(0.0, 1.0);
-        let border_color = border_color
+        let border_color = style
+            .border_off
             .map(|c| lerp_color(c, gpui::Hsla::transparent_black(), 1.0 - border_alpha));
 
-        // 勾图标透明度
-        let icon_alpha = if self.show_icon {
-            ((p - 0.5) * 2.0).clamp(0.0, 1.0)
+        // 图标槽：拇指越过中点时切换显示的图标，并在中点两侧交叉淡化
+        //（对齐 m3fx `updateDisplayedIcon` / `updateIconOpacity`）
+        let same_icons = matches!(
+            (self.selected_icon, self.unselected_icon),
+            (Some(a), Some(b)) if a == b
+        );
+        let (displayed_icon, icon_alpha) = if p >= 0.5 {
+            (
+                self.selected_icon,
+                if same_icons {
+                    1.0
+                } else {
+                    (2.0 * p - 1.0).clamp(0.0, 1.0)
+                },
+            )
         } else {
-            0.0
+            (
+                self.unselected_icon,
+                if same_icons {
+                    1.0
+                } else {
+                    (1.0 - 2.0 * p).clamp(0.0, 1.0)
+                },
+            )
         };
         let icon_color = if disabled {
             colors.surface_container_highest
-        } else {
+        } else if p >= 0.5 {
             colors.on_primary_container
+        } else {
+            colors.on_surface_variant
         };
 
-        let track_w = px(tokens.track_width);
-        let track_h = px(tokens.track_height);
+        let track_w = style.track_size.0;
+        let track_h = style.track_size.1;
 
         let base = div()
             .id(self.id.clone())
@@ -212,7 +255,18 @@ impl Render for SwitchState {
             .flex_none()
             .rounded_full()
             .bg(track_bg)
-            .when_some(border_color, |el, color| el.border_2().border_color(color))
+            // 描边画在独立的圆环层：轨道容器本身不带 border，
+            // 避免绝对定位的拇指相对 padding box 定位而整体偏移 2px
+            .when_some(border_color, |el, color| {
+                el.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .rounded_full()
+                        .border_2()
+                        .border_color(color),
+                )
+            })
             .when(!disabled, |el| el.cursor_pointer().overflow_hidden());
 
         let entity = cx.entity();
@@ -253,10 +307,10 @@ impl Render for SwitchState {
                 .justify_center()
                 .rounded_full()
                 .bg(handle_bg)
-                .when(icon_alpha > 0.0, |el| {
+                .when_some(displayed_icon.filter(|_| icon_alpha > 0.0), |el, icon| {
                     el.child(
-                        Icon::new(IconName::Check)
-                            .size(px(tokens.icon_size))
+                        Icon::new(icon)
+                            .size(style.icon_size)
                             .color(icon_color.opacity(icon_alpha)),
                     )
                 }),

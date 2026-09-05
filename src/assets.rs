@@ -1,55 +1,32 @@
-//! 内嵌图标资源（Material Symbols，Apache-2.0）
+//! 内嵌资源源。
 //!
-//! gpui 的 `svg()` 元素通过 `AssetSource` 按路径加载资源，
-//! 因此库把所需图标以字节形式内嵌，并提供 [`Md3Assets`] 作为资源源。
+//! 图标已改为字体字形渲染（见 [`crate::icon`]），不再内嵌图标 SVG；
+//! 仅保留 [`CircularProgress` 旋转弧](crate::components::CircularProgress)
+//! 所需的一个内部 SVG。[`Md3Assets`] 与 [`CombinedAssets`] 作为
+//! 资源源工具保留，供用户组合自己的 `AssetSource`。
 //!
-//! 应用启动时安装：
 //! ```ignore
 //! gpui_platform::application().with_assets(Md3Assets).run(|cx| { ... })
 //! ```
-//! 如果你已有自己的 `AssetSource`，可用 [`Md3Assets::with_fallback`] 组合。
 
 use anyhow::Result;
 use gpui::{AssetSource, SharedString};
 use std::borrow::Cow;
 
-macro_rules! icons {
-    ($($name:literal),* $(,)?) => {
-        &[
-            $((
-                concat!("md3-icons/", $name, ".svg"),
-                include_bytes!(concat!("../assets/icons/", $name, ".svg")).as_slice(),
-            )),*
-        ]
-    };
-}
+/// `CircularProgress` 旋转弧 SVG 的资源路径。
+pub const PROGRESS_ARC_SVG_PATH: &str = "md3-icons/progress_arc.svg";
 
-/// (asset_path, bytes)
-static ICONS: &[(&str, &[u8])] = icons![
-    "add",
-    "arrow_back",
-    "check",
-    "chevron_right",
-    "close",
-    "delete",
-    "edit",
-    "favorite",
-    "home",
-    "info",
-    "menu",
-    "more_vert",
-    "person",
-    "progress_arc",
-    "search",
-    "settings",
-    "star",
-];
+/// (asset_path, bytes)：仅保留内部需要的资源。
+static RESOURCES: &[(&str, &[u8])] = &[(
+    "md3-icons/progress_arc.svg",
+    include_bytes!("assets/progress_arc.svg").as_slice(),
+)];
 
 /// md3-gpui 的内嵌资源源
 pub struct Md3Assets;
 
 impl Md3Assets {
-    /// 与另一个 AssetSource 组合：md3 图标优先，其余路径回退到 `fallback`。
+    /// 与另一个 AssetSource 组合：md3 内部资源优先，其余路径回退到 `fallback`。
     pub fn with_fallback(fallback: impl AssetSource) -> CombinedAssets {
         CombinedAssets {
             fallback: Box::new(fallback),
@@ -57,7 +34,7 @@ impl Md3Assets {
     }
 
     fn find(path: &str) -> Option<&'static [u8]> {
-        ICONS
+        RESOURCES
             .iter()
             .find(|(name, _)| *name == path)
             .map(|(_, bytes)| *bytes)
@@ -70,7 +47,7 @@ impl AssetSource for Md3Assets {
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        Ok(ICONS
+        Ok(RESOURCES
             .iter()
             .filter(|(name, _)| name.starts_with(path))
             .map(|(name, _)| SharedString::from(*name))
@@ -92,7 +69,7 @@ impl AssetSource for CombinedAssets {
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        let mut out: Vec<SharedString> = ICONS
+        let mut out: Vec<SharedString> = RESOURCES
             .iter()
             .filter(|(name, _)| name.starts_with(path))
             .map(|(name, _)| SharedString::from(*name))

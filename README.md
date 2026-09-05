@@ -16,6 +16,8 @@ Pure gpui implementation for rendering; dynamic color uses the `mcu-*` algorithm
   - 13 MD3 easing curves incl. the three-segment emphasized curve; `reduce_motion` support
 - **m3fx interaction behaviors**: spring-animated state layers, pointer ripples, spring-driven switch / checkbox / radio / tab-indicator animations
 - **Window-level overlay system** (`md3_gpui::overlay`): `OverlayHost` + `show_snackbar` / `show_menu` / `show_tooltip`
+- **Font-glyph icons with on-demand woff2 subset** (m3fx `M3Icon` style): `Icon` renders Material Symbols **ligature names**; the bundled icon font is a ~3 KB woff2 server-side subset of the 17 built-in icons, generated per the official Material Symbols self-hosting guide (sorted `icon_names=` + instantiated `opsz,wght,FILL,GRAD@24,400,0,0` axes), and any of the 2500+ icons works via `Icon::new(IconName::Custom("bolt"))` when the full font is registered
+- **Component style layer** (`md3_gpui::styles`): one `XxxStyle` struct per component (geometry, shape, colors, typography) with token-derived defaults — renders consume styles instead of hardcoding them; entity components accept `.style(|s| …)` instance overrides
 - **Components** (aligned with material-web component specs)
 
   | Category | Components |
@@ -23,7 +25,7 @@ Pure gpui implementation for rendering; dynamic color uses the `mcu-*` algorithm
   | Buttons | `Button` (filled / tonal / elevated / outlined / text), `IconButton` (4 variants + toggle), `Fab` (3 sizes / 4 colors / extended) |
   | Selection | `Checkbox`, `RadioButton`, `Switch`, `Slider` (M3 refreshed visuals), `Chip` (assist / filter / input / suggestion) |
   | Containers | `Card` (elevated / filled / outlined), `Dialog`, `List` / `ListItem`, `Divider` |
-  | Navigation | `TabBar` / `Tab` (spring-sliding indicator) |
+  | Navigation | `TabBar` / `Tab` (spring-sliding indicator), `TopAppBar`, `NavigationBar`, `NavigationRail`, `NavigationDrawer` (+ sections), `NavigationItemSpec` |
   | Input | `TextField` (outlined, floating label, helper/error text, focus morph) |
   | Overlays | `Snackbar`, `Menu`, `Tooltip` (via `overlay::host`) |
   | Progress | `LinearProgress` (determinate / indeterminate), `CircularProgress` |
@@ -148,15 +150,49 @@ Simple containers (`Card`, `Divider`, `List` / `ListItem`, `Dialog`, progress in
 | `TabBar` | `md-tabs` | 48dp height (64dp with icon), 3dp indicator |
 | `LinearProgress` | `md-linear-progress` | 4dp track |
 
+## Fonts (embedded woff2, zero app code)
+
+`md3_gpui::init()` registers the bundled fonts automatically — fonts are embedded in **woff2** (web-standard compression) and decoded to TTF at startup with the pure-Rust [`wuff`](https://crates.io/crates/wuff) decoder:
+
+- **Roboto** Regular / Medium / Bold (Apache-2.0) — Google Fonts latin slices, ~22 KB each
+- **Material Symbols Outlined subset** (~3 KB, Apache-2.0) — only the glyphs used by [`IconName`](crate::icon::IconName), generated via Google Fonts' server-side on-demand subsetting (`icon_names=` API, the same mechanism behind the web "CSS import" workflow)
+
+Icon rendering uses font glyphs (ligature names, m3fx `M3Icon` style). To use **any** icon via `Icon::new(IconName::Custom("bolt"))`, download the full Material Symbols variable font from [Google Fonts](https://fonts.google.com/icons) and register it in addition:
+
+```rust
+use std::borrow::Cow;
+
+application().run(|cx| {
+    cx.text_system()
+        .add_fonts(vec![Cow::Borrowed(include_bytes!(
+            "../fonts/MaterialSymbolsOutlined.ttf"
+        ).as_slice())])
+        .unwrap();
+    md3_gpui::init(cx); // also registers bundled woff2 fonts (Roboto + icon subset)
+    // ...
+});
+```
+
+After adding icons to `IconName`, regenerate the icon-font subset the official way — request Google Fonts with an **alphabetically sorted, comma-separated** `icon_names` list and the axes instantiated to the app's single combination (`display=block` + a modern-browser User-Agent yields woff2):
+
+```
+https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add,arrow_back,check,...&display=block
+```
+
+Note: the bundled Roboto latin slices cover Latin text; other scripts fall back to system fonts (MD3 recommends the Noto collection).
+
 ## Known limitations / roadmap
 
 - [ ] Keyboard focus ring and accessibility (focus-visible state layers, keyboard activation)
 - [ ] IME / marked-text input in `TextField`; keyboard navigation for `Menu`
-- [ ] Remaining m3fx families: navigation (TopAppBar / NavigationBar / Drawer / Rail), segmented buttons, badges / avatars, color pickers, date & time pickers, TableView / TreeView / Carousel
+- [ ] Remaining m3fx families: segmented buttons, badges / avatars, color pickers, date & time pickers, TableView / TreeView / Carousel, SearchBar
+- [ ] Style-layer migration for the remaining components (Style structs exist; Button/Switch consume them today, migrate the rest)
+- [ ] Navigation indicator cross-item slide (currently centered on the selected item; see `TabBar` for the sliding pattern)
 - [ ] Per-component token coverage beyond the first-phase subset
 - [ ] Determinate mode for CircularProgress
 - [ ] Menu / tooltip flip-over when exceeding window bounds
-- [ ] Roboto font is not distributed with the library; systems without Roboto fall back to the default font
+- [ ] Roboto SemiBold (600) is not registered by the demo (classic Roboto ships 400/500/700); 600-weight text snaps to the nearest available weight
+- [ ] The `check` glyph's optical center sits ~1.8px above the geometric em center (Material Symbols design, same on Android/m3fx)
 
 ## License
 

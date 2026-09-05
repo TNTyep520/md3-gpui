@@ -88,8 +88,21 @@ impl Theme {
     /// 由种子色生成主题（动态色）。
     ///
     /// `seed` 为 ARGB 种子色；`profile` 决定动态色规格与令牌家族。
+    /// 基线种子色 `0x6750A4` + `Baseline2021` 时直接使用 material-web /
+    /// MD3 官方的精确 baseline 亮/暗常量表（与动态色推导存在 ±1~3/255
+    /// 的 HCT 舍入差异，为保证 switch 手柄等角色与规范一致，此处精确对齐）；
+    /// 其余种子色经 material-color-utilities 动态生成。
     pub fn from_seed(seed: u32, mode: ThemeMode, profile: Profile) -> Self {
-        let colors = color_scheme_from_seed(seed, mode == ThemeMode::Dark, profile);
+        let is_dark = mode == ThemeMode::Dark;
+        let colors = if seed == 0x6750A4 && profile == Profile::Baseline2021 {
+            if is_dark {
+                ColorScheme::dark()
+            } else {
+                ColorScheme::light()
+            }
+        } else {
+            color_scheme_from_seed(seed, is_dark, profile)
+        };
         Self::from_token_set(TokenSet::new(profile, colors), mode, DEFAULT_FONT_FAMILY)
     }
 

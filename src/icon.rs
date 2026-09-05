@@ -1,61 +1,101 @@
-//! Icon 元素：渲染内嵌的 Material Symbols 图标
+//! Icon 元素：以字体字形渲染 Material Symbols 图标。
+//!
+//! 实现方式对齐 [m3fx](https://github.com/Glavo/m3fx) 的 `M3Icon`
+//! （Apache-2.0，© 2026 Glavo）：图标由内嵌的 Material Symbols Outlined
+//! 符号字体（见 [`crate::fonts`]）以字形连字（ligature）渲染，
+//! 不再使用 SVG 资源——任意图标无需手动导入，直接写 ligature 名即可。
 //!
 //! ```ignore
-//! Icon::new(IconName::Favorite).size(px(24.)).color(theme.colors.primary)
+//! use md3_gpui::prelude::*;
+//!
+//! Icon::new(IconName::Favorite).size(px(24.)).color(theme.colors().primary)
+//! Icon::new(IconName::Custom("bolt")).size(px(24.))   // 任意图标
 //! ```
 //! 不设置 `color` 时继承父元素文字颜色。
 
-use gpui::{App, Hsla, IntoElement, Pixels, RenderOnce, Styled, Window, prelude::*, px, svg};
+use gpui::{
+    App, Hsla, IntoElement, Pixels, RenderOnce, SharedString, Styled, Window, div, prelude::*, px,
+};
 
-/// 内嵌图标名（对应 assets/icons/*.svg）
+/// 图标字体族名（Material Symbols Outlined）。
+///
+/// 库内不内嵌字体（对齐 m3fx）：应用需自行注册该字体
+/// （`text_system().add_fonts` 或系统安装），否则图标以
+/// ligature 文本回退显示。
+pub const ICON_FONT_FAMILY: &str = "Material Symbols Outlined";
+
+/// 图标名。
+///
+/// 每个 variant 对应一个 Material Symbols ligature 名；
+/// [`IconName::Custom`] 接受任意图标的 ligature 名（如 `"bolt"`、
+/// `"settings_backup_restore"`），只要该图标存在于内嵌符号字体中。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IconName {
+    /// add
     Add,
+    /// arrow_back
     ArrowBack,
+    /// check
     Check,
+    /// chevron_right
     ChevronRight,
+    /// close
     Close,
+    /// delete
     Delete,
+    /// edit
     Edit,
+    /// favorite
     Favorite,
+    /// home
     Home,
+    /// info
     Info,
+    /// menu
     Menu,
+    /// more_vert
     MoreVert,
+    /// person
     Person,
-    /// 内部使用：环形进度条的 270° 圆弧
-    ProgressArc,
+    /// 内部使用：环形进度指示（`progress_activity`）
+    ProgressActivity,
+    /// search
     Search,
+    /// settings
     Settings,
+    /// star
     Star,
+    /// 任意图标的 ligature 名（`&'static str`，通常为字面量）
+    Custom(&'static str),
 }
 
 impl IconName {
-    /// 资源路径（由 [`crate::assets::Md3Assets`] 提供）
-    pub fn asset_path(&self) -> &'static str {
+    /// Material Symbols ligature 名（字体渲染用）。
+    pub fn ligature(&self) -> &'static str {
         match self {
-            IconName::Add => "md3-icons/add.svg",
-            IconName::ArrowBack => "md3-icons/arrow_back.svg",
-            IconName::Check => "md3-icons/check.svg",
-            IconName::ChevronRight => "md3-icons/chevron_right.svg",
-            IconName::Close => "md3-icons/close.svg",
-            IconName::Delete => "md3-icons/delete.svg",
-            IconName::Edit => "md3-icons/edit.svg",
-            IconName::Favorite => "md3-icons/favorite.svg",
-            IconName::Home => "md3-icons/home.svg",
-            IconName::Info => "md3-icons/info.svg",
-            IconName::Menu => "md3-icons/menu.svg",
-            IconName::MoreVert => "md3-icons/more_vert.svg",
-            IconName::Person => "md3-icons/person.svg",
-            IconName::ProgressArc => "md3-icons/progress_arc.svg",
-            IconName::Search => "md3-icons/search.svg",
-            IconName::Settings => "md3-icons/settings.svg",
-            IconName::Star => "md3-icons/star.svg",
+            IconName::Add => "add",
+            IconName::ArrowBack => "arrow_back",
+            IconName::Check => "check",
+            IconName::ChevronRight => "chevron_right",
+            IconName::Close => "close",
+            IconName::Delete => "delete",
+            IconName::Edit => "edit",
+            IconName::Favorite => "favorite",
+            IconName::Home => "home",
+            IconName::Info => "info",
+            IconName::Menu => "menu",
+            IconName::MoreVert => "more_vert",
+            IconName::Person => "person",
+            IconName::ProgressActivity => "progress_activity",
+            IconName::Search => "search",
+            IconName::Settings => "settings",
+            IconName::Star => "star",
+            IconName::Custom(name) => name,
         }
     }
 }
 
-/// 图标元素
+/// 图标元素（字体字形渲染）
 #[derive(IntoElement)]
 pub struct Icon {
     name: IconName,
@@ -64,6 +104,7 @@ pub struct Icon {
 }
 
 impl Icon {
+    /// 创建图标。
     pub fn new(name: IconName) -> Self {
         Self {
             name,
@@ -72,13 +113,18 @@ impl Icon {
         }
     }
 
-    /// 图标尺寸（默认 24dp）
+    /// 从 ligature 名创建任意图标（等价于 `Icon::new(IconName::Custom(name))`）。
+    pub fn ligature(name: &'static str) -> Self {
+        Self::new(IconName::Custom(name))
+    }
+
+    /// 图标尺寸（默认 24dp）。
     pub fn size(mut self, size: Pixels) -> Self {
         self.size = size;
         self
     }
 
-    /// 图标颜色；不设置则继承文字颜色
+    /// 图标颜色；不设置则继承文字颜色。
     pub fn color(mut self, color: Hsla) -> Self {
         self.color = Some(color);
         self
@@ -87,10 +133,15 @@ impl Icon {
 
 impl RenderOnce for Icon {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        svg()
-            .path(self.name.asset_path())
-            .size(self.size)
+        // 行高锁定为图标尺寸：gpui 会把字体的自然行（ascent+descent，
+        // Material Symbols 为 1.2×字号）在行盒内居中放置，实测字形墨心
+        // 恰好落在行盒中心，无需额外补偿（实测 ascent 26.4/descent 2.4 @24px）。
+        div()
+            .font_family(ICON_FONT_FAMILY)
+            .text_size(self.size)
+            .line_height(self.size)
             .flex_none()
             .when_some(self.color, |el, color| el.text_color(color))
+            .child(SharedString::from(self.name.ligature()))
     }
 }

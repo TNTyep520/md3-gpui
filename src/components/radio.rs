@@ -179,7 +179,8 @@ impl Render for RadioState {
             let select_entity = entity.clone();
             base.on_click(move |_event, window, cx| {
                 select_entity.update(cx, |state, cx| {
-                    state.set_selected(true, window, cx);
+                    // 可取消勾选：点击已选中的项切换为未选中
+                    state.set_selected(!state.selected, window, cx);
                     if let Some(handler) = state.on_select.clone() {
                         handler(window, cx);
                     }
