@@ -5,7 +5,7 @@
 //! ```
 //! 不设置 `color` 时继承父元素文字颜色。
 
-use gpui::{prelude::*, px, svg, App, Hsla, IntoElement, Pixels, RenderOnce, Styled, Window};
+use gpui::{App, Hsla, IntoElement, Pixels, RenderOnce, Styled, Window, prelude::*, px, svg};
 
 /// 内嵌图标名（对应 assets/icons/*.svg）
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

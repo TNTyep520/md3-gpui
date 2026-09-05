@@ -2,7 +2,7 @@
 //!
 //! 1dp 分割线，颜色 outline-variant，支持水平/垂直与 inset。
 
-use gpui::{div, prelude::*, px, App, IntoElement, RenderOnce, Window};
+use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*, px};
 
 use crate::theme::ActiveTheme;
 
@@ -39,7 +39,7 @@ impl Divider {
 
 impl RenderOnce for Divider {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = cx.theme().colors.outline_variant;
+        let color = cx.theme().colors().outline_variant;
         if self.vertical {
             // 外层占位，内层着色，避免 margin 溢出
             div()

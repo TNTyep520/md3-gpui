@@ -1,20 +1,22 @@
 [package]
 name = "md3-gpui"
 version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
-description = "Material Design 3 (MD3) component library for GPUI, following the material-web design specs"
-repository = "https://github.com/your-name/md3-gpui"
+edition = "2024"
+license = "Apache-2.0 license"
+description = "Material Design 3 component library for gpui"
+repository = "https://github.com/TNTyep520/md3-gpui"
 
 [dependencies]
-# gpui 来自 zed 主仓库（未固定 rev；如需可复现构建，可加 rev = "<commit>"）
 gpui = { git = "https://github.com/zed-industries/zed" }
 anyhow = "1"
+mcu-hct = { version = "0.2.1", registry = "rsproxy-sparse" }
+mcu-palettes = { version = "0.2.0", registry = "rsproxy-sparse" }
+mcu-dynamiccolor = { version = "0.2.4", registry = "rsproxy-sparse" }
 
 [dev-dependencies]
-# gallery 示例需要平台启动层（zed 已将平台后端拆分为 gpui_platform）
+# demo 示例需要平台启动层（zed 已将平台后端拆分为 gpui_platform）
 # x11/wayland/font-kit/runtime_shaders 均为目标平台门控 feature，
-# 在 Windows 上会被自动忽略，无副作用。
+# 在 Windows 上会自动忽略
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
     "font-kit",
     "x11",

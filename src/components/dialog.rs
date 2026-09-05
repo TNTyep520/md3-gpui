@@ -17,8 +17,8 @@
 //! ```
 
 use gpui::{
-    anchored, deferred, div, point, prelude::*, px, AnyElement, App, ElementId, IntoElement,
-    RenderOnce, SharedString, Window,
+    AnyElement, App, ElementId, IntoElement, RenderOnce, SharedString, Window, anchored, deferred,
+    div, point, prelude::*, px,
 };
 use std::rc::Rc;
 
@@ -83,11 +83,11 @@ impl gpui::ParentElement for Dialog {
 impl RenderOnce for Dialog {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let colors = &theme.colors;
+        let colors = theme.colors();
         let viewport = window.viewport_size();
 
-        let title_style = theme.typography.headline_small;
-        let body_style = theme.typography.body_medium;
+        let title_style = theme.typography().headline_small;
+        let body_style = theme.typography().body_medium;
 
         let container = div()
             .id(self.id.clone())
@@ -99,7 +99,7 @@ impl RenderOnce for Dialog {
             .max_h(viewport.height - px(96.))
             .flex()
             .flex_col()
-            .rounded(theme.shapes.extra_large)
+            .rounded(theme.shapes().extra_large)
             .bg(colors.surface_container_high)
             .shadow(Elevation::Level3.shadows(colors.shadow))
             .p(px(24.))

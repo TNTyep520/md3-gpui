@@ -1,8 +1,9 @@
 //! # md3-gpui
 //!
 //! 基于 [gpui](https://github.com/zed-industries/zed/tree/main/crates/gpui) 的
-//! Material Design 3 组件库，设计规范对齐
-//! [material-web](https://github.com/material-components/material-web)。
+//! Material Design 3 组件库。令牌与运动系统移植自
+//! [m3fx](https://github.com/Glavo/m3fx)（Apache-2.0），并对齐
+//! [material-web](https://github.com/material-components/material-web) 的组件规格。
 //!
 //! ## 快速开始
 //!
@@ -16,6 +17,8 @@
 //!         .with_assets(Md3Assets)          // 安装内嵌图标资源
 //!         .run(|cx| {
 //!             md3_gpui::init(cx);          // 安装默认（亮色）主题
+//!             // 或者：动态色 + Expressive profile
+//!             // Theme::set(cx, Theme::from_seed(0x6750A4, ThemeMode::Light, Profile::Expressive2025));
 //!             cx.open_window(WindowOptions::default(), |_, cx| {
 //!                 cx.new(|_| MyApp)
 //!             }).unwrap();
@@ -27,8 +30,8 @@
 //!         let theme = cx.theme();
 //!         div()
 //!             .size_full()
-//!             .bg(theme.colors.surface)
-//!             .child(Button::new("hi", "Hello MD3").on_click(|_, _, _| {}))
+//!             .bg(theme.colors().surface)
+//!             .child(Button::new("hi", "Hello MD3").on_click(|_, _, _| {}).build(cx))
 //!     }
 //! }
 //! ```
@@ -36,6 +39,9 @@
 pub mod assets;
 pub mod components;
 pub mod icon;
+pub mod interaction;
+pub mod motion;
+pub mod overlay;
 pub mod theme;
 
 pub use assets::Md3Assets;
@@ -57,7 +63,17 @@ pub mod prelude {
     pub use crate::assets::Md3Assets;
     pub use crate::components::*;
     pub use crate::icon::{Icon, IconName};
+    pub use crate::motion::{
+        Animatable, AnimatedComponent, AnimationDriver, Easing, MotionRole, MotionScheme,
+        MotionSpec, SpringParameters,
+    };
+    pub use crate::overlay::{
+        MenuItem, MenuState, OverlayHostState, OverlayRegistry, Snackbar, close_menu,
+        close_tooltip, host, show_menu, show_snackbar, show_tooltip,
+    };
     pub use crate::theme::{
-        ActiveTheme, ColorScheme, Elevation, Theme, ThemeMode, TypeScale, TypeStyle,
+        ActiveTheme, ColorScheme, ComponentTokens, Density, Elevation, ElevationTokens, Profile,
+        Shapes, StateLayerTokens, Theme, ThemeMode, TokenSet, TokenSetBuilder, TypeScale,
+        TypeStyle, color_scheme_from_seed,
     };
 }

@@ -4,8 +4,8 @@
 //! supporting 用 body-medium、trailing 用 label-small。
 
 use gpui::{
-    div, prelude::*, px, AnyElement, App, ClickEvent, ElementId, IntoElement, RenderOnce,
-    SharedString, Window,
+    AnyElement, App, ClickEvent, ElementId, IntoElement, RenderOnce, SharedString, Window, div,
+    prelude::*, px,
 };
 
 use crate::icon::{Icon, IconName};
@@ -41,7 +41,7 @@ impl gpui::ParentElement for List {
 
 impl RenderOnce for List {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let colors = &cx.theme().colors;
+        let colors = cx.theme().colors();
         div()
             .flex()
             .flex_col()
@@ -134,15 +134,15 @@ impl ListItem {
 impl RenderOnce for ListItem {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let colors = &theme.colors;
+        let colors = theme.colors();
         let disabled = self.disabled;
         let two_line = self.supporting_text.is_some();
         let height = if two_line { px(72.) } else { px(56.) };
         let layer = colors.on_surface;
 
-        let headline_style = theme.typography.body_large;
-        let supporting_style = theme.typography.body_medium;
-        let trailing_style = theme.typography.label_small;
+        let headline_style = theme.typography().body_large;
+        let supporting_style = theme.typography().body_medium;
+        let trailing_style = theme.typography().label_small;
 
         div()
             .id(self.id)

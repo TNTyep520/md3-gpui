@@ -4,7 +4,7 @@
 //! 基线（baseline）取值与 material-web 的 `md-sys-color` 令牌一致。
 //! 参考: <https://m3.material.io/styles/color/roles>
 
-use gpui::{rgb, Hsla};
+use gpui::{Hsla, rgb};
 
 /// 十六进制 -> Hsla 便捷函数
 pub fn hex(value: u32) -> Hsla {

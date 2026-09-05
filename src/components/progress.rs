@@ -4,8 +4,8 @@
 //! - CircularProgress：48dp 旋转圆弧（不确定进度）。
 
 use gpui::{
-    div, ease_in_out, percentage, prelude::*, px, relative, svg, Animation, AnimationExt, App,
-    ElementId, IntoElement, RenderOnce, Transformation, Window,
+    Animation, AnimationExt, App, ElementId, IntoElement, RenderOnce, Transformation, Window, div,
+    ease_in_out, percentage, prelude::*, px, relative, svg,
 };
 use std::time::Duration;
 
@@ -41,7 +41,7 @@ impl LinearProgress {
 
 impl RenderOnce for LinearProgress {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let colors = &cx.theme().colors;
+        let colors = cx.theme().colors();
         let active = colors.primary;
         let track = colors.surface_container_highest;
 
@@ -104,7 +104,7 @@ impl Default for CircularProgress {
 
 impl RenderOnce for CircularProgress {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = cx.theme().colors.primary;
+        let color = cx.theme().colors().primary;
         svg()
             .path(IconName::ProgressArc.asset_path())
             .size(self.size)

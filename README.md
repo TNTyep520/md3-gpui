@@ -1,17 +1,21 @@
 # md3-gpui
 
-Based on [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui), the GPU-accelerated UI framework from Zed, this is a **Material Design 3** component library that follows Google’s [material-web](https://github.com/material-components/material-web) design tokens and specifications.
+Based on [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui), the GPU-accelerated UI framework from Zed, this is a **Material Design 3** component library. Component specs follow Google’s [material-web](https://github.com/material-components/material-web); the token, motion and theme architecture is ported from [m3fx](https://github.com/Glavo/m3fx) (Apache-2.0).
 
-Pure gpui implementation with no other UI library dependencies.
+Pure gpui implementation for rendering; dynamic color uses the `mcu-*` algorithm crates (Material color utilities).
 
 ## Features
 
-- **Complete MD3 theme token system**
-  - Colors: all MD3 color roles (primary / secondary / tertiary / error / surface series / outline, etc.), built-in baseline light and dark schemes, replaceable for dynamic theming
-  - Typography: full type scale (display / headline / title / body / label × large / medium / small)
-  - Shapes: extra-small → extra-large corner radius tokens
-  - Elevation: Level 0–5 shadow options
-  - State layers: hover / focus / pressed / dragged opacity and blend utilities
+- **m3fx token system** (`Profile` × `TokenSet`)
+  - `TokenSet`: color / typography / shape / elevation / motion / state-layer / component token groups with builder-level overrides
+  - `Profile::Baseline2021` and `Profile::Expressive2025` (Expressive shape scale, type scale and motion scheme)
+  - Dynamic color: `Theme::from_seed(seed, mode, profile)` via material-color-utilities (HCT), reproducing the material-web baseline palette
+- **m3fx motion system** (`md3_gpui::motion`)
+  - `MotionScheme`: six semantic roles (fast/default/slow × effects/spatial), standard + expressive presets
+  - Closed-form damped spring solver with retargetable `Animatable` values (velocity-preserving retargeting)
+  - 13 MD3 easing curves incl. the three-segment emphasized curve; `reduce_motion` support
+- **m3fx interaction behaviors**: spring-animated state layers, pointer ripples, spring-driven switch / checkbox / radio / tab-indicator animations
+- **Window-level overlay system** (`md3_gpui::overlay`): `OverlayHost` + `show_snackbar` / `show_menu` / `show_tooltip`
 - **Components** (aligned with material-web component specs)
 
   | Category | Components |
@@ -19,7 +23,9 @@ Pure gpui implementation with no other UI library dependencies.
   | Buttons | `Button` (filled / tonal / elevated / outlined / text), `IconButton` (4 variants + toggle), `Fab` (3 sizes / 4 colors / extended) |
   | Selection | `Checkbox`, `RadioButton`, `Switch`, `Slider` (M3 refreshed visuals), `Chip` (assist / filter / input / suggestion) |
   | Containers | `Card` (elevated / filled / outlined), `Dialog`, `List` / `ListItem`, `Divider` |
-  | Navigation | `TabBar` / `Tab` |
+  | Navigation | `TabBar` / `Tab` (spring-sliding indicator) |
+  | Input | `TextField` (outlined, floating label, helper/error text, focus morph) |
+  | Overlays | `Snackbar`, `Menu`, `Tooltip` (via `overlay::host`) |
   | Progress | `LinearProgress` (determinate / indeterminate), `CircularProgress` |
 
 - Embedded Material Symbols icon subset (`Icon` / `IconName`, Apache-2.0)
@@ -51,7 +57,7 @@ impl Render for MyApp {
         let theme = cx.theme();
         div()
             .size_full()
-            .bg(theme.colors.surface)
+            .bg(theme.colors().surface)
             .flex()
             .items_center()
             .justify_center()
@@ -59,7 +65,8 @@ impl Render for MyApp {
                 Button::new("hello", "Hello MD3")
                     .filled()
                     .leading_icon(IconName::Favorite)
-                    .on_click(|_, _, _| println!("clicked!")),
+                    .on_click(|_, _, _| println!("clicked!"))
+                    .build(cx), // Entity components: build once, keep the handle
             )
     }
 }
@@ -82,7 +89,7 @@ fn main() {
 cargo run --example demo
 ```
 
-The demo window shows all components and includes a top-right switch to toggle light/dark theme.
+The demo window shows all components; the header switches toggle light/dark and Baseline/Expressive themes, and the text-field page applies a live dynamic-color seed. It also demonstrates spring ripples, state layers, tab-indicator motion and the overlay system.
 
 > On the first build, cargo will fetch and compile the full gpui repository (a large dependency). This may take a while.
 
@@ -90,19 +97,38 @@ The demo window shows all components and includes a top-right switch to toggle l
 
 ```rust
 use md3_gpui::prelude::*;
-use md3_gpui::theme::hex;
 
-// Switch to dark theme
+// Baseline light/dark (seed #6750A4, Baseline2021)
 Theme::set(cx, Theme::dark());
 
-// Customize brand color by replacing roles in the ColorScheme
+// Dynamic color from a seed, with the Expressive 2025 profile
+Theme::set(cx, Theme::from_seed(0x006A6A, ThemeMode::Light, Profile::Expressive2025));
+
+// Override whole token groups via the builder
+let tokens = TokenSet::builder(Profile::Baseline2021, cx.theme().colors().clone())
+    .with_motion(MotionScheme::expressive())
+    .build();
 let mut theme = Theme::light();
-theme.colors.primary = hex(0x006A6A);
-theme.colors.on_primary = hex(0xFFFFFF);
+theme.set_token_set(tokens);
 Theme::set(cx, theme);
 ```
 
-Components read the global theme from `cx.theme()` during `render`. After replacing the theme, trigger a redraw with `cx.notify()` to apply the new theme.
+Components read the global theme from `cx.theme()` during `render` (`theme.colors()`, `theme.typography()`, `theme.shapes()`, `theme.motion()`, ...). After replacing the theme, trigger a redraw with `cx.refresh_windows()`.
+
+## Stateful components
+
+Interactive components own their animation state, so they are entities created once and kept:
+
+```rust
+// Create (in new(), or the first render — never every frame):
+let checkbox = Checkbox::new("agree").build(cx);
+let switch = Switch::new("wifi").on_change(|checked, _, _| {}).build(cx);
+
+// Render: entity handles are elements
+div().child(checkbox.clone()).child(switch.clone())
+```
+
+Simple containers (`Card`, `Divider`, `List` / `ListItem`, `Dialog`, progress indicators) remain stateless `RenderOnce` elements.
 
 ## Design mapping
 
@@ -124,11 +150,12 @@ Components read the global theme from `cx.theme()` during `render`. After replac
 
 ## Known limitations / roadmap
 
-- [ ] Ripple effect (currently approximated by MD3 state layer hover/pressed blend)
-- [ ] Keyboard focus ring and accessibility
-- [ ] TextField, Menu, Select, Snackbar, NavigationBar / Drawer
-- [ ] Dynamic color generation based on HCT (Material You from seed color)
+- [ ] Keyboard focus ring and accessibility (focus-visible state layers, keyboard activation)
+- [ ] IME / marked-text input in `TextField`; keyboard navigation for `Menu`
+- [ ] Remaining m3fx families: navigation (TopAppBar / NavigationBar / Drawer / Rail), segmented buttons, badges / avatars, color pickers, date & time pickers, TableView / TreeView / Carousel
+- [ ] Per-component token coverage beyond the first-phase subset
 - [ ] Determinate mode for CircularProgress
+- [ ] Menu / tooltip flip-over when exceeding window bounds
 - [ ] Roboto font is not distributed with the library; systems without Roboto fall back to the default font
 
 ## License

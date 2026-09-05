@@ -4,8 +4,8 @@
 //! Card 实现了 `Styled` 与 `ParentElement`，可以像 `div` 一样追加样式和子元素。
 
 use gpui::{
-    div, AnyElement, App, Div, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled,
-    Window,
+    AnyElement, App, Div, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    div,
 };
 
 use crate::theme::{ActiveTheme, Elevation};
@@ -74,11 +74,11 @@ impl ParentElement for Card {
 impl RenderOnce for Card {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let colors = &theme.colors;
+        let colors = theme.colors();
 
         let base = self
             .base
-            .rounded(theme.shapes.medium)
+            .rounded(theme.shapes().medium)
             .text_color(colors.on_surface);
 
         let base = match self.variant {

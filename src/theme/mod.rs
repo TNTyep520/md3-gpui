@@ -1,80 +1,188 @@
-//! MD3 主题系统：颜色 / 字体 / 形状 / 高度 / 状态层令牌的聚合。
+//! MD3 主题系统：颜色 / 字体 / 形状 / 高度 / 状态层 / 运动 / 组件令牌的聚合。
+//!
+//! 架构移植自 [m3fx](https://github.com/Glavo/m3fx) 的 `tokens` + `theme`
+//! 包（Apache-2.0，© 2026 Glavo）：主题 = [`TokenSet`]（不可变令牌集合，
+//! 支持 profile 预设与整组覆盖）+ 全局字体族。
 //!
 //! 用法：
 //! ```ignore
 //! use md3_gpui::prelude::*;
 //!
 //! application().run(|cx| {
-//!     md3_gpui::init(cx);                 // 安装默认亮色主题
-//!     // 或者：Theme::set(cx, Theme::dark());
+//!     md3_gpui::init(cx);                          // 安装默认亮色主题
+//!     // 或者：种子色动态色主题
+//!     Theme::set(cx, Theme::from_seed(0x6750A4, ThemeMode::Light, Profile::Baseline2021));
+//!     // 或者：Expressive profile
+//!     Theme::set(cx, Theme::from_seed(0x6750A4, ThemeMode::Dark, Profile::Expressive2025));
 //! });
 //!
 //! // 在任意 render 中：
 //! let theme = cx.theme();
-//! div().bg(theme.colors.surface)
+//! div().bg(theme.colors().surface)
 //! ```
 
 mod color;
+mod component_tokens;
+mod density;
+mod dynamic_color;
 mod elevation;
+mod profile;
 mod shape;
 mod state;
+mod token_set;
 mod typography;
 
-pub use color::{hex, ColorScheme};
-pub use elevation::Elevation;
+pub use color::{ColorScheme, hex};
+pub use component_tokens::{
+    ButtonTokens, ComponentTokens, MenuTokens, SliderTokens, SnackbarTokens, SwitchTokens,
+    TextFieldTokens, TooltipTokens,
+};
+pub use density::Density;
+pub use dynamic_color::color_scheme_from_seed;
+pub use elevation::{Elevation, ElevationTokens};
+pub use profile::Profile;
 pub use shape::Shapes;
 pub use state::*;
+pub use token_set::{DEFAULT_FONT_FAMILY, TokenSet, TokenSetBuilder, font_family};
 pub use typography::{TypeScale, TypeStyle};
 
 use gpui::{App, Global, SharedString};
 
+use crate::motion::MotionScheme;
+
 /// 主题模式
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ThemeMode {
+    /// 亮色。
+    #[default]
     Light,
+    /// 暗色。
     Dark,
 }
 
-/// MD3 主题（作为 gpui Global 存储）
+/// MD3 主题（作为 gpui Global 存储）。
+///
+/// 主题 = [`TokenSet`] + 字体族；颜色/字型/形状/运动等一律经
+/// 访问器读取。主题是纯数据对象，替换后需触发重绘
+/// （如 `cx.refresh_windows()`）。
 #[derive(Clone, Debug)]
 pub struct Theme {
-    pub mode: ThemeMode,
-    pub colors: ColorScheme,
-    pub typography: TypeScale,
-    pub shapes: Shapes,
-    /// 全局字体族（默认 Roboto，缺失时由系统回退）
-    pub font_family: SharedString,
+    mode: ThemeMode,
+    tokens: TokenSet,
+    font_family: SharedString,
 }
 
 impl Global for Theme {}
 
 impl Theme {
+    /// MD3 基线亮色主题（种子色 `#6750A4`，Baseline2021 profile）。
     pub fn light() -> Self {
-        Self {
-            mode: ThemeMode::Light,
-            colors: ColorScheme::light(),
-            typography: TypeScale::default(),
-            shapes: Shapes::default(),
-            font_family: "Roboto".into(),
-        }
+        Self::from_seed(0x6750A4, ThemeMode::Light, Profile::Baseline2021)
     }
 
+    /// MD3 基线暗色主题（种子色 `#6750A4`，Baseline2021 profile）。
     pub fn dark() -> Self {
+        Self::from_seed(0x6750A4, ThemeMode::Dark, Profile::Baseline2021)
+    }
+
+    /// 由种子色生成主题（动态色）。
+    ///
+    /// `seed` 为 ARGB 种子色；`profile` 决定动态色规格与令牌家族。
+    pub fn from_seed(seed: u32, mode: ThemeMode, profile: Profile) -> Self {
+        let colors = color_scheme_from_seed(seed, mode == ThemeMode::Dark, profile);
+        Self::from_token_set(TokenSet::new(profile, colors), mode, DEFAULT_FONT_FAMILY)
+    }
+
+    /// 由令牌集构建主题。
+    pub fn from_token_set(
+        tokens: TokenSet,
+        mode: ThemeMode,
+        font_family: impl Into<SharedString>,
+    ) -> Self {
         Self {
-            mode: ThemeMode::Dark,
-            colors: ColorScheme::dark(),
-            typography: TypeScale::default(),
-            shapes: Shapes::default(),
-            font_family: "Roboto".into(),
+            mode,
+            tokens,
+            font_family: font_family.into(),
         }
     }
 
-    /// 读取全局主题
+    /// 主题模式。
+    pub fn mode(&self) -> ThemeMode {
+        self.mode
+    }
+
+    /// 是否暗色模式。
+    pub fn is_dark(&self) -> bool {
+        self.mode == ThemeMode::Dark
+    }
+
+    /// 全局字体族。
+    pub fn font_family(&self) -> &SharedString {
+        &self.font_family
+    }
+
+    /// 完整令牌集。
+    pub fn token_set(&self) -> &TokenSet {
+        &self.tokens
+    }
+
+    /// 替换令牌集（保持当前模式与字体族）。
+    pub fn set_token_set(&mut self, tokens: TokenSet) {
+        self.tokens = tokens;
+    }
+
+    /// 令牌 Profile。
+    pub fn profile(&self) -> Profile {
+        self.tokens.profile
+    }
+
+    /// 布局密度。
+    pub fn density(&self) -> Density {
+        self.tokens.density
+    }
+
+    /// 颜色角色令牌。
+    pub fn colors(&self) -> &ColorScheme {
+        &self.tokens.colors
+    }
+
+    /// 字体排印令牌。
+    pub fn typography(&self) -> &TypeScale {
+        &self.tokens.typography
+    }
+
+    /// 形状（圆角刻度）令牌。
+    pub fn shapes(&self) -> &Shapes {
+        &self.tokens.shapes
+    }
+
+    /// 高度令牌。
+    pub fn elevation_tokens(&self) -> &ElevationTokens {
+        &self.tokens.elevation
+    }
+
+    /// 运动方案。
+    pub fn motion(&self) -> &MotionScheme {
+        &self.tokens.motion
+    }
+
+    /// 状态层令牌。
+    pub fn state_layer(&self) -> &StateLayerTokens {
+        &self.tokens.state_layer
+    }
+
+    /// 组件令牌。
+    pub fn component(&self) -> &ComponentTokens {
+        &self.tokens.component
+    }
+
+    /// 读取全局主题。
     pub fn global(cx: &App) -> &Theme {
         cx.global::<Theme>()
     }
 
-    /// 替换全局主题（切换亮/暗色后请触发一次重绘，如 `cx.refresh_windows()` 或视图 `cx.notify()`）
+    /// 替换全局主题（切换主题后请触发一次重绘，如 `cx.refresh_windows()`
+    /// 或视图 `cx.notify()`）。
     pub fn set(cx: &mut App, theme: Theme) {
         cx.set_global(theme);
     }
@@ -82,11 +190,32 @@ impl Theme {
 
 /// 便捷 trait：`cx.theme()`
 pub trait ActiveTheme {
+    /// 读取全局主题。
     fn theme(&self) -> &Theme;
 }
 
 impl ActiveTheme for App {
     fn theme(&self) -> &Theme {
         Theme::global(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_seed_matches_baseline_defaults() {
+        // 基线种子色的亮色主题应与旧版手写的基线方案一致
+        let theme = Theme::light();
+        assert_eq!(theme.mode(), ThemeMode::Light);
+        assert_eq!(theme.profile(), Profile::Baseline2021);
+    }
+
+    #[test]
+    fn expressive_theme_uses_expressive_tokens() {
+        let theme = Theme::from_seed(0x6750A4, ThemeMode::Light, Profile::Expressive2025);
+        assert_eq!(theme.shapes().extra_small, gpui::px(6.));
+        assert_eq!(theme.typography().display_large.size, gpui::px(64.));
     }
 }

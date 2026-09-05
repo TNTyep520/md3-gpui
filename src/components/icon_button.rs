@@ -1,29 +1,49 @@
-//! MD3 IconButton（对应 material-web 的 `md-icon-button` 系列）
+//! MD3 IconButton（对应 material-web 的 `md-icon-button` 系列）。
 //!
 //! 变体：Standard / Filled / FilledTonal / Outlined。
 //! 规格：容器 40×40dp、图标 24dp、圆形。支持 toggle（选中态）。
+//!
+//! 交互行为移植自 [m3fx](https://github.com/Glavo/m3fx) 的
+//! `M3IconButtonSkin` / `M3IconToggleButtonSkin`（Apache-2.0，© 2026 Glavo）。
+//!
+//! ```ignore
+//! IconButton::new("fav", IconName::Favorite)
+//!     .selected(is_fav)
+//!     .on_click(|_, _, _| {})
+//!     .build(cx)   // -> Entity<IconButtonState>
+//! ```
 
-use gpui::{div, prelude::*, px, App, ClickEvent, ElementId, IntoElement, RenderOnce, Window};
+use std::rc::Rc;
+use std::time::Instant;
 
-use crate::icon::{Icon, IconName};
-use crate::theme::{
-    hover_layer, pressed_layer, ActiveTheme, DISABLED_CONTAINER_OPACITY, DISABLED_CONTENT_OPACITY,
-    HOVER_OPACITY, PRESSED_OPACITY,
+use gpui::{
+    App, AppContext as _, ClickEvent, Context, ElementId, Entity, InteractiveElement as _,
+    IntoElement, ParentElement as _, Render, StatefulInteractiveElement as _, Styled, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 
-type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
+use crate::icon::{Icon, IconName};
+use crate::interaction::{InteractiveSurface, wire_events};
+use crate::motion::{AnimatedComponent, AnimationDriver};
+use crate::theme::ActiveTheme;
 
+type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
+
+/// 图标按钮变体。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum IconButtonVariant {
+    /// 标准无容器图标按钮。
     #[default]
     Standard,
+    /// 实心图标按钮。
     Filled,
+    /// 次级色调实心图标按钮。
     FilledTonal,
+    /// 描边图标按钮。
     Outlined,
 }
 
-/// MD3 图标按钮
-#[derive(IntoElement)]
+/// MD3 图标按钮构建器（`.build(cx)` 产出 [`IconButtonState`]）。
 pub struct IconButton {
     id: ElementId,
     icon: IconName,
@@ -33,7 +53,19 @@ pub struct IconButton {
     on_click: Option<ClickHandler>,
 }
 
+/// 图标按钮的有状态部分。
+pub struct IconButtonState {
+    id: ElementId,
+    icon: IconName,
+    variant: IconButtonVariant,
+    selected: bool,
+    disabled: bool,
+    on_click: Option<ClickHandler>,
+    surface: InteractiveSurface,
+}
+
 impl IconButton {
+    /// 创建图标按钮构建器。
     pub fn new(id: impl Into<ElementId>, icon: IconName) -> Self {
         Self {
             id: id.into(),
@@ -45,46 +77,88 @@ impl IconButton {
         }
     }
 
+    /// 设置变体。
     pub fn variant(mut self, variant: IconButtonVariant) -> Self {
         self.variant = variant;
         self
     }
 
+    /// Filled 变体。
     pub fn filled(self) -> Self {
         self.variant(IconButtonVariant::Filled)
     }
 
+    /// FilledTonal 变体。
     pub fn tonal(self) -> Self {
         self.variant(IconButtonVariant::FilledTonal)
     }
 
+    /// Outlined 变体。
     pub fn outlined(self) -> Self {
         self.variant(IconButtonVariant::Outlined)
     }
 
-    /// toggle 选中态
+    /// toggle 选中态。
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
     }
 
+    /// 设置禁用态。
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 
+    /// 设置点击回调。
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_click = Some(Box::new(handler));
+        self.on_click = Some(Rc::new(handler));
         self
+    }
+
+    /// 构建有状态组件实体。
+    pub fn build(self, cx: &mut App) -> Entity<IconButtonState> {
+        cx.new(|_| IconButtonState {
+            id: self.id,
+            icon: self.icon,
+            variant: self.variant,
+            selected: self.selected,
+            disabled: self.disabled,
+            on_click: self.on_click,
+            surface: InteractiveSurface::new(),
+        })
     }
 }
 
-impl RenderOnce for IconButton {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let colors = &cx.theme().colors;
+impl IconButtonState {
+    /// 组件最近的边界（窗口坐标），可用于菜单等弹层锚定。
+    pub fn bounds(&self) -> gpui::Bounds<gpui::Pixels> {
+        self.surface.bounds.get()
+    }
+}
+
+impl AnimatedComponent for IconButtonState {
+    fn step(&mut self, now: Instant) -> bool {
+        self.surface.step(now)
+    }
+
+    fn driver_mut(&mut self) -> &mut AnimationDriver {
+        self.surface.driver_mut()
+    }
+}
+
+impl Render for IconButtonState {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.surface.is_animating() {
+            self.schedule_next(window, cx);
+        }
+
+        let theme = cx.theme();
+        let colors = theme.colors();
+        let state_layer = *theme.state_layer();
         let disabled = self.disabled;
         let selected = self.selected;
 
@@ -116,23 +190,18 @@ impl RenderOnce for IconButton {
         };
 
         let fg = if disabled {
-            colors.on_surface.opacity(DISABLED_CONTENT_OPACITY)
+            colors.on_surface.opacity(state_layer.disabled_content)
         } else {
             fg
         };
         let bg = if disabled {
-            bg.map(|_| colors.on_surface.opacity(DISABLED_CONTAINER_OPACITY))
+            bg.map(|_| colors.on_surface.opacity(state_layer.disabled_container))
         } else {
             bg
         };
 
-        let (hover_bg, pressed_bg) = match bg {
-            Some(base) if !disabled => (hover_layer(base, fg), pressed_layer(base, fg)),
-            _ => (fg.opacity(HOVER_OPACITY), fg.opacity(PRESSED_OPACITY)),
-        };
-
-        div()
-            .id(self.id)
+        let base = div()
+            .id(self.id.clone())
             .size(px(40.))
             .flex()
             .flex_none()
@@ -143,19 +212,30 @@ impl RenderOnce for IconButton {
             .when_some(bg, |el, bg_color| el.bg(bg_color))
             .when(outlined, |el| {
                 el.border_1().border_color(if disabled {
-                    colors.on_surface.opacity(DISABLED_CONTENT_OPACITY)
+                    colors.on_surface.opacity(state_layer.disabled_content)
                 } else {
                     colors.outline
                 })
             })
-            .when(!disabled, |el| {
-                el.cursor_pointer()
-                    .hover(move |s| s.bg(hover_bg))
-                    .active(move |s| s.bg(pressed_bg))
-            })
-            .when_some(self.on_click.filter(|_| !disabled), |el, handler| {
-                el.on_click(move |event, window, cx| handler(event, window, cx))
-            })
-            .child(Icon::new(self.icon).size(px(24.)))
+            .when(!disabled, |el| el.cursor_pointer().overflow_hidden());
+
+        let entity = cx.entity();
+        let base = if disabled {
+            base
+        } else {
+            let base = wire_events(base, &entity, theme.motion(), |s: &mut Self| &mut s.surface);
+            let base = self.surface.overlay(fg, state_layer.pressed).apply(base);
+            base.child(self.surface.bounds.capture_element())
+        };
+
+        let base = if disabled {
+            base
+        } else if let Some(handler) = self.on_click.clone() {
+            base.on_click(move |event, window, cx| handler(event, window, cx))
+        } else {
+            base
+        };
+
+        base.child(Icon::new(self.icon).size(px(24.)))
     }
 }
