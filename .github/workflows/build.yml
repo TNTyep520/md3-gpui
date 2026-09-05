@@ -54,9 +54,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           targets: ${{ matrix.target }}
-        # dtolnay/rust-toolchain@nightly 默认安装 rust-src 组件；
-        # 如需显式安装：
-        # run: rustup toolchain install nightly --component rust-src --target ${{ matrix.target }} && rustup default nightly
+          components: rust-src
 
       - name: Verify rust-src component
         shell: bash
@@ -70,7 +68,7 @@ jobs:
         shell: bash
         run: >
           cargo +nightly build --release --target ${{ matrix.target }} --example demo
-          -Z build-std=core
+          -Z build-std=std,core
           -Z build-std-features=default,optimize_for_size
 
       - name: Upload demo artifact
