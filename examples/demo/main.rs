@@ -1,3 +1,6 @@
+// Windows 下隐藏随 GUI 程序弹出的控制台窗口
+#![windows_subsystem = "windows"]
+
 //! md3-gpui 组件演示（入口）。
 //!
 //! 结构：
