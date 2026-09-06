@@ -75,5 +75,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: demo-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/examples/demo & target/${{ matrix.target }}/release/examples/demo.exe
+          path: target/${{ matrix.target }}/release/examples/demo*
           if-no-files-found: error
