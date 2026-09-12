@@ -281,9 +281,11 @@ impl Render for OverlayHostState {
                 )
         });
 
-        // 根容器为零尺寸（不拦截窗口其余部分的点击），
-        // 弹层子元素以 window 坐标绝对定位
+        // 根容器以绝对定位铺满窗口（无背景、自身不拦截点击），
+        // 弹层子元素的百分比/绝对定位以整个窗口为基准
         div()
+            .absolute()
+            .inset_0()
             .flex_none()
             .when_some(snack_el, |el, s| el.child(s))
             .when_some(menu_el, |el, m| el.child(m))

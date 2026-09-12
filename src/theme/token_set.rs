@@ -64,8 +64,8 @@ impl TokenSet {
 /// use md3_gpui::theme::{Profile, TokenSet};
 /// use md3_gpui::motion::MotionScheme;
 ///
-/// let tokens = TokenSet::builder(Profile::Expressive2025, colors)
-///     .with_motion(MotionScheme::expressive())
+/// let tokens = TokenSet::builder(Profile::Baseline2021, colors)
+///     .with_motion(MotionScheme::standard())
 ///     .build();
 /// ```
 #[derive(Clone, Debug)]
@@ -88,19 +88,10 @@ impl TokenSetBuilder {
             profile,
             density: Density::default(),
             colors,
-            typography: match profile {
-                Profile::Baseline2021 => TypeScale::baseline(),
-                Profile::Expressive2025 => TypeScale::expressive(),
-            },
-            shapes: match profile {
-                Profile::Baseline2021 => Shapes::baseline(),
-                Profile::Expressive2025 => Shapes::expressive(),
-            },
+            typography: TypeScale::baseline(),
+            shapes: Shapes::baseline(),
             elevation: ElevationTokens::baseline(),
-            motion: match profile {
-                Profile::Baseline2021 => MotionScheme::standard(),
-                Profile::Expressive2025 => MotionScheme::expressive(),
-            },
+            motion: MotionScheme::standard(),
             state_layer: StateLayerTokens::baseline(),
             component: ComponentTokens::default(),
         }
@@ -212,26 +203,15 @@ mod tests {
             700.0
         );
         assert_eq!(baseline.shapes.medium, gpui::px(12.));
-
-        let expressive = TokenSet::new(Profile::Expressive2025, ColorScheme::light());
-        assert_eq!(
-            expressive
-                .motion
-                .spec(MotionRole::DefaultSpatial)
-                .spring
-                .stiffness,
-            380.0
-        );
-        assert_eq!(expressive.shapes.medium, gpui::px(16.));
     }
 
     #[test]
     fn builder_overrides_groups() {
         let tokens = TokenSet::builder(Profile::Baseline2021, ColorScheme::dark())
-            .with_shapes(Shapes::expressive())
+            .with_motion(MotionScheme::standard())
             .build();
-        // 颜色组保持 dark，形状组被整体替换
+        // 颜色组保持 dark，运动组被整体替换
         assert_eq!(tokens.colors.surface, ColorScheme::dark().surface);
-        assert_eq!(tokens.shapes.extra_small, gpui::px(6.));
+        assert_eq!(tokens.shapes.extra_small, gpui::px(4.));
     }
 }

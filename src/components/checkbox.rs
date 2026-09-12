@@ -207,7 +207,10 @@ impl Render for CheckboxState {
             base
         } else {
             let base = wire_events(base, &entity, theme.motion(), |s: &mut Self| &mut s.surface);
-            let base = self.surface.overlay(layer, state_layer.pressed).apply(base);
+            let base = self
+                .surface
+                .overlay(layer, state_layer.pressed, gpui::px(999.))
+                .apply(base);
             base.child(self.surface.bounds.capture_element())
         };
 

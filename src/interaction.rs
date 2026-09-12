@@ -15,8 +15,8 @@ use std::time::Instant;
 
 use gpui::{
     AnyElement, Bounds, Canvas, Div, Entity, Hsla, InteractiveElement as _, IntoElement as _,
-    MouseButton, ParentElement as _, Pixels, Point, Stateful, StatefulInteractiveElement as _,
-    Styled, canvas, div, point, px,
+    MouseButton, ParentElement as _, PathBuilder, Pixels, Point, Stateful,
+    StatefulInteractiveElement as _, Styled, canvas, div, point, px,
 };
 
 use crate::motion::{Animatable, AnimationDriver, MotionRole, MotionScheme, lerp_color};
@@ -68,6 +68,9 @@ pub struct InteractiveSurface {
     /// 是否启用涟漪（m3fx 中 Switch/Checkbox/Radio 等选择控件
     /// 只有状态层、没有涟漪；默认启用）。
     pub ripple_enabled: bool,
+    /// 涟漪最大半径；`None` 时自动取按压点到组件最远角的距离。
+    /// Compose M3 的开关等控件用固定半径（StateLayerSize/2 = 20dp）。
+    ripple_max_radius: Option<Pixels>,
     state_layer_opacity: Animatable,
     ripple: Option<Ripple>,
     driver: AnimationDriver,
@@ -97,10 +100,23 @@ impl InteractiveSurface {
             hovered: false,
             pressed: false,
             ripple_enabled: true,
+            ripple_max_radius: None,
             state_layer_opacity: Animatable::new(0.0, 1.0e-3),
             ripple: None,
             driver: AnimationDriver::default(),
         }
+    }
+
+    /// 设置涟漪最大半径（`None` 恢复自动：按压点到最远角的距离）。
+    pub fn set_ripple_max_radius(&mut self, max_radius: Option<Pixels>) {
+        self.ripple_max_radius = max_radius;
+    }
+
+    /// hover/armed 过渡进度（0..1）。对齐 m3fx selection.css:hover、
+    /// armed、pressed 共用同一配色档,故按压不归零。
+    /// 供组件派生交互变色(如开关拇指的 hover 变色)。
+    pub fn hover_progress(&self) -> f64 {
+        f64::clamp(self.state_layer_opacity.value() / HOVER_PROGRESS, 0.0, 1.0)
     }
 
     /// 内嵌驱动器（供 [`crate::motion::AnimatedComponent::driver_mut`] 返回）。
@@ -151,14 +167,15 @@ impl InteractiveSurface {
         if !self.ripple_enabled {
             return;
         }
-        // 最大半径取圆心到组件最远角的距离
+        // 最大半径：显式上限优先（如 Compose M3 开关的 20dp），
+        // 否则取圆心到组件最远角的距离
         let bounds = self.bounds.get();
         let local_x = f32::from(position.x - bounds.origin.x);
         let local_y = f32::from(position.y - bounds.origin.y);
         let width = f32::from(bounds.size.width);
         let height = f32::from(bounds.size.height);
         let dx2 = |x: f32, y: f32| f64::from(x * x + y * y);
-        let max_radius = f64::max(
+        let auto_radius = f64::max(
             f64::max(dx2(local_x, local_y), dx2(width - local_x, local_y)),
             f64::max(
                 dx2(local_x, height - local_y),
@@ -166,14 +183,16 @@ impl InteractiveSurface {
             ),
         )
         .sqrt();
+        let max_radius = self.ripple_max_radius.map(f64::from).unwrap_or(auto_radius);
         let mut ripple = Ripple {
             origin: point(px(local_x), px(local_y)),
             radius: Animatable::new(0.0, 1.0e-2),
             fade: Animatable::new(1.0, 1.0e-2),
         };
+        // 涟漪扩散对齐 m3fx:defaultSpatial(defaultEffects 只用于淡出)
         ripple
             .radius
-            .animate_to(max_radius, motion.spec(MotionRole::FastEffects), now);
+            .animate_to(max_radius, motion.spec(MotionRole::DefaultSpatial), now);
         self.ripple = Some(ripple);
     }
 
@@ -224,31 +243,20 @@ impl InteractiveSurface {
     ///
     /// `base_color` 为状态层/涟漪基色（通常是组件的 content/on-container
     /// 色）；`pressed_opacity` 为满档（按压）状态层不透明度，取自主题
-    /// state layer 令牌（如 0.10）；hover 按 8%/10% 比例映射。
-    pub fn overlay(&self, base_color: Hsla, pressed_opacity: f32) -> InteractiveOverlay {
+    /// state layer 令牌（如 0.10）；hover 按 8%/10% 比例映射；
+    /// `corner_radius` 为容器圆角——状态层自带同值圆角，
+    /// 不依赖容器裁剪（对齐 m3fx `M3StateLayer` 自带容器形状）。
+    pub fn overlay(
+        &self,
+        base_color: Hsla,
+        pressed_opacity: f32,
+        corner_radius: Pixels,
+    ) -> InteractiveOverlay {
         let layer_alpha = f32::clamp(
             self.state_layer_opacity.value() as f32 * pressed_opacity,
             0.0,
             1.0,
         );
-        let ripples: Vec<AnyElement> = self
-            .ripple
-            .iter()
-            .filter(|r| r.fade.value() > 0.0 && r.radius.value() > 0.0)
-            .map(|r| {
-                let radius = r.radius.value() as f32;
-                let alpha = f32::clamp(r.fade.value() as f32 * pressed_opacity, 0.0, 1.0);
-                let color = lerp_color(Hsla::transparent_black(), base_color, alpha);
-                div()
-                    .absolute()
-                    .left(r.origin.x - px(radius))
-                    .top(r.origin.y - px(radius))
-                    .size(px(radius * 2.0))
-                    .rounded_full()
-                    .bg(color)
-                    .into_any_element()
-            })
-            .collect();
         InteractiveOverlay {
             state_layer_color: if layer_alpha > 0.0 {
                 Some(lerp_color(
@@ -259,8 +267,41 @@ impl InteractiveSurface {
             } else {
                 None
             },
-            ripples,
+            ripples: self.ripple_elements(base_color, pressed_opacity, corner_radius, false),
+            corner_radius,
         }
+    }
+
+    /// 生成 Compose M3 风格的覆盖层：无轨道面状态层，涟漪以按压点为
+    /// 圆心、不裁剪到容器形状（对齐 Compose `Switch` 等以无界涟漪
+    /// `bounded = false` 作指示的控件；半径上限由
+    /// [`Self::set_ripple_max_radius`] 控制，默认 20dp）。
+    pub fn overlay_unclipped(&self, base_color: Hsla, ripple_opacity: f32) -> InteractiveOverlay {
+        InteractiveOverlay {
+            state_layer_color: None,
+            ripples: self.ripple_elements(base_color, ripple_opacity, px(0.), true),
+            corner_radius: px(0.),
+        }
+    }
+
+    /// 按当前涟漪状态构建涟漪元素列表。
+    fn ripple_elements(
+        &self,
+        base_color: Hsla,
+        ripple_opacity: f32,
+        corner_radius: Pixels,
+        unclipped: bool,
+    ) -> Vec<AnyElement> {
+        self.ripple
+            .iter()
+            .filter(|r| r.fade.value() > 0.0 && r.radius.value() > 0.0)
+            .map(|r| {
+                let radius = r.radius.value() as f32;
+                let alpha = f32::clamp(r.fade.value() as f32 * ripple_opacity, 0.0, 1.0);
+                let color = lerp_color(Hsla::transparent_black(), base_color, alpha);
+                ripple_element(r.origin, radius, color, corner_radius, unclipped)
+            })
+            .collect()
     }
 }
 
@@ -270,20 +311,144 @@ pub struct InteractiveOverlay {
     state_layer_color: Option<Hsla>,
     /// 涟漪圆元素。
     ripples: Vec<AnyElement>,
+    /// 状态层圆角（与容器形状一致）。
+    corner_radius: Pixels,
 }
 
 impl InteractiveOverlay {
-    /// 把覆盖层子元素挂到容器上（容器应为绝对定位锚点并裁剪溢出）。
+    /// 把覆盖层子元素挂到容器上。状态层自带与容器一致的圆角，
+    /// 不依赖容器裁剪（对齐 m3fx `M3StateLayer` 自带容器形状）。
     pub fn apply(self, container: Stateful<Div>) -> Stateful<Div> {
         let mut container = container;
         if let Some(color) = self.state_layer_color {
-            container = container.child(div().absolute().inset_0().bg(color));
+            container = container.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(self.corner_radius)
+                    .bg(color),
+            );
         }
         for ripple in self.ripples {
             container = container.child(ripple);
         }
         container
     }
+}
+
+/// 单个涟漪的自绘元素：paint 阶段把涟漪圆与容器圆角矩形求交集后绘制。
+///
+/// gpui 的 `overflow_hidden` 裁剪掩码是纯矩形、不识别圆角，旧实现
+/// （超出容器的大圆 div + 容器裁剪）会让涟漪填色出现在圆角外的角部；
+/// 这里改为直接绘制交集多边形，涟漪从数学上不会越出容器形状。
+/// `unclipped` 时直接绘制整圆（Compose 无界涟漪，允许越出容器）。
+/// 涟漪圆与容器角部圆弧均以多边形离散近似，在涟漪的不透明度
+/// （≤10%）与组件尺度下视觉与精确形状无差。
+fn ripple_element(
+    origin: Point<Pixels>,
+    radius: f32,
+    color: Hsla,
+    corner_radius: Pixels,
+    unclipped: bool,
+) -> AnyElement {
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            // 闭包内的 origin 为容器本地坐标，先换算到窗口坐标
+            let circle = circle_polygon(bounds.origin + origin, radius);
+            let points = if unclipped {
+                circle
+            } else {
+                let clip = rounded_rect_polygon(bounds, corner_radius);
+                let Some(points) = clip_convex(&circle, &clip) else {
+                    return;
+                };
+                points
+            };
+            let mut builder = PathBuilder::fill();
+            builder.add_polygon(&points, true);
+            if let Ok(path) = builder.build() {
+                window.paint_path(path, color);
+            }
+        },
+    )
+    .absolute()
+    .inset_0()
+    .into_any_element()
+}
+
+/// 圆的正多边形近似顶点（顶点序与 [`rounded_rect_polygon`] 同为顺时针）。
+fn circle_polygon(center: Point<Pixels>, radius: f32) -> Vec<Point<Pixels>> {
+    const CIRCLE_SEGMENTS: usize = 96;
+    (0..CIRCLE_SEGMENTS)
+        .map(|i| {
+            let angle = std::f32::consts::TAU * i as f32 / CIRCLE_SEGMENTS as f32;
+            point(
+                center.x + px(radius * angle.cos()),
+                center.y + px(radius * angle.sin()),
+            )
+        })
+        .collect()
+}
+
+/// 圆角矩形的凸多边形近似（顺时针，四角圆弧各 [`ARC_SEGMENTS`] 段）。
+fn rounded_rect_polygon(bounds: Bounds<Pixels>, corner_radius: Pixels) -> Vec<Point<Pixels>> {
+    const ARC_SEGMENTS: usize = 12;
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    // 圆角钳制到短边一半（shapes.full = 999px 依赖此钳制得到胶囊形）
+    let r = f32::from(corner_radius).clamp(0.0, w.min(h) / 2.0);
+    let (x0, y0) = (f32::from(bounds.origin.x), f32::from(bounds.origin.y));
+    let (x1, y1) = (x0 + w, y0 + h);
+    let mut points = Vec::with_capacity(4 * (ARC_SEGMENTS + 1));
+    // 从右上角起顺时针遍历，每角给出圆心与起始角、沿外弧扫过 90°
+    for (cx, cy, start) in [
+        (x1 - r, y0 + r, -std::f32::consts::FRAC_PI_2),
+        (x1 - r, y1 - r, 0.0),
+        (x0 + r, y1 - r, std::f32::consts::FRAC_PI_2),
+        (x0 + r, y0 + r, std::f32::consts::PI),
+    ] {
+        for i in 0..=ARC_SEGMENTS {
+            let angle = start + std::f32::consts::FRAC_PI_2 * i as f32 / ARC_SEGMENTS as f32;
+            points.push(point(px(cx + r * angle.cos()), px(cy + r * angle.sin())));
+        }
+    }
+    points
+}
+
+/// 点 `p` 相对有向边 a→b 的叉积分量（两多边形均为顺时针，>0 即在内侧）。
+fn edge_cross(a: Point<Pixels>, b: Point<Pixels>, p: Point<Pixels>) -> f32 {
+    let (ux, uy) = (f32::from(b.x - a.x), f32::from(b.y - a.y));
+    let (vx, vy) = (f32::from(p.x - a.x), f32::from(p.y - a.y));
+    ux * vy - uy * vx
+}
+
+/// Sutherland–Hodgman 多边形裁剪：返回 `subject ∩ clip`。
+/// `clip` 必须为凸多边形；交集退化（不足三个顶点）时返回 `None`。
+fn clip_convex(subject: &[Point<Pixels>], clip: &[Point<Pixels>]) -> Option<Vec<Point<Pixels>>> {
+    let mut output: Vec<Point<Pixels>> = subject.to_vec();
+    for i in 0..clip.len() {
+        if output.is_empty() {
+            return None;
+        }
+        let a = clip[i];
+        let b = clip[(i + 1) % clip.len()];
+        let input = std::mem::take(&mut output);
+        for j in 0..input.len() {
+            let (p, q) = (input[j], input[(j + 1) % input.len()]);
+            let (dp, dq) = (edge_cross(a, b, p), edge_cross(a, b, q));
+            let (p_in, q_in) = (dp >= 0.0, dq >= 0.0);
+            if p_in != q_in {
+                // 线段 p→q 与裁剪边所在直线的交点（dp、dq 异号，t ∈ [0,1]）
+                let t = dp / (dp - dq);
+                output.push(point(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t));
+            }
+            if q_in {
+                output.push(q);
+            }
+        }
+    }
+    (output.len() >= 3).then_some(output)
 }
 
 /// 把 hover / press / release / cancel 事件接到内嵌
@@ -334,4 +499,77 @@ pub fn wire_events<T: 'static>(
             cx.notify();
         });
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::size;
+
+    use super::*;
+
+    /// 涟漪裁剪的回归测试：交集多边形必须完全位于容器圆角矩形内
+    /// （修复前涟漪以超出容器的大圆 div 渲染，会越出圆角边界）。
+    #[test]
+    fn ripple_intersection_stays_inside_container() {
+        let bounds = Bounds {
+            origin: point(px(100.), px(200.)),
+            size: size(px(120.), px(40.)),
+        };
+        // shapes.full = 999px，依赖钳制得到胶囊形
+        let clip = rounded_rect_polygon(bounds, px(999.));
+
+        // 覆盖边缘、角落与中心等典型按压点，以及全部动画半径档位
+        let press_points = [
+            point(px(0.), px(20.)),
+            point(px(1.), px(1.)),
+            point(px(119.), px(39.)),
+            point(px(60.), px(20.)),
+        ];
+        for origin in press_points {
+            for radius in [1.0f32, 10.0, 30.0, 60.0, 200.0] {
+                let circle = circle_polygon(bounds.origin + origin, radius);
+                let Some(result) = clip_convex(&circle, &clip) else {
+                    continue; // 无交集时允许为空
+                };
+                assert!(result.len() >= 3, "退化多边形 at {origin:?} r={radius}");
+                // 凸多边形内侧判定：结果点相对每条裁剪边的叉积非负（留浮点容差）
+                for p in &result {
+                    for i in 0..clip.len() {
+                        let d = edge_cross(clip[i], clip[(i + 1) % clip.len()], *p);
+                        assert!(
+                            d > -0.01,
+                            "结果点 {p:?} 越出裁剪边 {i}（按压点 {origin:?}，半径 {radius}）"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// 圆完全在容器内时，交集应为完整的圆多边形（不被裁剪）。
+    #[test]
+    fn circle_inside_container_is_untouched() {
+        let bounds = Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(200.), px(40.)),
+        };
+        let clip = rounded_rect_polygon(bounds, px(999.));
+        let circle = circle_polygon(point(px(100.), px(20.)), 10.0);
+        let Some(result) = clip_convex(&circle, &clip) else {
+            panic!("交集不应为空");
+        };
+        assert_eq!(result.len(), circle.len());
+    }
+
+    /// 圆完全在容器外时，交集为空。
+    #[test]
+    fn circle_outside_container_yields_none() {
+        let bounds = Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(200.), px(40.)),
+        };
+        let clip = rounded_rect_polygon(bounds, px(20.));
+        let circle = circle_polygon(point(px(300.), px(20.)), 10.0);
+        assert!(clip_convex(&circle, &clip).is_none());
+    }
 }

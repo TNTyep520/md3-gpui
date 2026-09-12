@@ -25,8 +25,6 @@ pub struct SwitchStyle {
     pub thumb_off: Pixels,
     /// 图标尺寸。
     pub icon_size: Pixels,
-    /// 手柄与轨道边缘的间距（无图标/带图标）。
-    pub thumb_margin: (Pixels, Pixels),
     /// 状态层基色。
     pub state_layer_color: Hsla,
     /// 按压档状态层不透明度。
@@ -46,13 +44,13 @@ impl SwitchStyle {
                     .opacity(state.disabled_container),
                 track_on: colors.on_surface.opacity(state.disabled_container),
                 handle_off: colors.on_surface.opacity(state.disabled_content),
+                // m3fx:禁用选中拇指 = surface(不透明),图标用 on_surface@38%
                 handle_on: colors.surface,
-                border_off: Some(colors.on_surface.opacity(state.disabled_content)),
+                border_off: Some(colors.on_surface.opacity(state.disabled_container)),
                 track_size: (px(switch.track_width), px(switch.track_height)),
                 thumb_on: px(switch.thumb_size),
                 thumb_off: px(switch.unselected_thumb_size),
                 icon_size: px(switch.icon_size),
-                thumb_margin: (px(6.), px(4.)),
                 state_layer_color: colors.on_surface,
                 state_layer_opacity: state.pressed,
             }
@@ -67,7 +65,6 @@ impl SwitchStyle {
                 thumb_on: px(switch.thumb_size),
                 thumb_off: px(switch.unselected_thumb_size),
                 icon_size: px(switch.icon_size),
-                thumb_margin: (px(6.), px(4.)),
                 state_layer_color: colors.on_surface,
                 state_layer_opacity: state.pressed,
             }

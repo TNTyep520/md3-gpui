@@ -108,44 +108,6 @@ impl MotionScheme {
         }
     }
 
-    /// Expressive 运动方案（effects 角色与 standard 一致，仅空间角色不同）。
-    pub fn expressive() -> Self {
-        Self {
-            specs: [
-                MotionSpec::spring(
-                    SpringParameters::new(1.0, 3800.0),
-                    dur::SHORT3,
-                    easing::FAST_EFFECTS,
-                ),
-                MotionSpec::spring(
-                    SpringParameters::new(1.0, 1600.0),
-                    dur::SHORT4,
-                    easing::DEFAULT_EFFECTS,
-                ),
-                MotionSpec::spring(
-                    SpringParameters::new(1.0, 800.0),
-                    dur::MEDIUM2,
-                    easing::SLOW_EFFECTS,
-                ),
-                MotionSpec::spring(
-                    SpringParameters::new(0.6, 800.0),
-                    dur::MEDIUM3,
-                    easing::EXPRESSIVE_FAST_SPATIAL,
-                ),
-                MotionSpec::spring(
-                    SpringParameters::new(0.8, 380.0),
-                    dur::LONG2,
-                    easing::EXPRESSIVE_DEFAULT_SPATIAL,
-                ),
-                MotionSpec::spring(
-                    SpringParameters::new(0.8, 200.0),
-                    Duration::from_millis(650),
-                    easing::EXPRESSIVE_SLOW_SPATIAL,
-                ),
-            ],
-        }
-    }
-
     /// 读取某角色的运动规格。
     pub fn spec(&self, role: MotionRole) -> &MotionSpec {
         let index = match role {
@@ -215,26 +177,6 @@ mod tests {
         let slow_spatial = scheme.spec(MotionRole::SlowSpatial);
         assert_eq!(slow_spatial.spring, SpringParameters::new(0.9, 300.0));
         assert_eq!(slow_spatial.fallback_duration, Duration::from_millis(750));
-    }
-
-    #[test]
-    fn expressive_differs_only_in_spatial() {
-        let standard = MotionScheme::standard();
-        let expressive = MotionScheme::expressive();
-        for role in [
-            MotionRole::FastEffects,
-            MotionRole::DefaultEffects,
-            MotionRole::SlowEffects,
-        ] {
-            assert_eq!(standard.spec(role), expressive.spec(role), "{role:?}");
-        }
-        for role in [
-            MotionRole::FastSpatial,
-            MotionRole::DefaultSpatial,
-            MotionRole::SlowSpatial,
-        ] {
-            assert_ne!(standard.spec(role), expressive.spec(role), "{role:?}");
-        }
     }
 
     #[test]

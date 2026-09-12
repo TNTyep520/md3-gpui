@@ -1,9 +1,9 @@
 //! Icon buttons & FAB 页。
 
-use gpui::{App, Entity, IntoElement, Render, Styled, Window, div, prelude::*, px};
+use gpui::{App, AppContext as _, Entity, IntoElement, Render, Window};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Icon buttons & FAB 页视图。
 pub struct IconButtonsFabPage {
@@ -51,21 +51,26 @@ impl IconButtonsFabPage {
 
 impl Render for IconButtonsFabPage {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        subsection(
-            cx,
-            "Icon buttons & FAB",
-            div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap(px(12.))
-                .child(self.ib_standard.clone())
-                .child(self.ib_filled.clone())
-                .child(self.ib_tonal.clone())
-                .child(self.ib_outlined.clone())
-                .child(self.fab_small.clone())
-                .child(self.fab_std.clone())
-                .child(self.fab_ext.clone()),
-        )
+        gallery([
+            showcase_group(
+                cx,
+                "Icon Buttons",
+                [
+                    self.ib_standard.clone().into_any_element(),
+                    self.ib_filled.clone().into_any_element(),
+                    self.ib_tonal.clone().into_any_element(),
+                    self.ib_outlined.clone().into_any_element(),
+                ],
+            ),
+            showcase_group(
+                cx,
+                "Floating Action Buttons",
+                [
+                    self.fab_small.clone().into_any_element(),
+                    self.fab_std.clone().into_any_element(),
+                    self.fab_ext.clone().into_any_element(),
+                ],
+            ),
+        ])
     }
 }

@@ -6,7 +6,7 @@ use md3_gpui::overlay::{
 };
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Overlays 页视图。
 pub struct OverlaysPage {
@@ -75,30 +75,27 @@ impl OverlaysPage {
 impl Render for OverlaysPage {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let tooltip_trigger = self.tooltip_trigger.clone();
-        subsection(
-            cx,
-            "Snackbar / Menu / Tooltip",
-            div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap(px(12.))
-                .child(self.b_snack.clone())
-                .child(self.b_menu.clone())
-                .child(
-                    div()
-                        .id("tooltip-wrap")
-                        .cursor_pointer()
-                        .on_hover(move |hovered, window, cx| {
-                            if *hovered {
-                                let bounds = tooltip_trigger.read(cx).bounds();
-                                show_tooltip(window, cx, "Tooltip via overlay host", bounds);
-                            } else {
-                                close_tooltip(window, cx);
-                            }
-                        })
-                        .child(self.tooltip_trigger.clone()),
-                ),
-        )
+
+        gallery([
+            showcase_group(cx, "Snackbar", [self.b_snack.clone().into_any_element()]),
+            showcase_group(cx, "Menu", [self.b_menu.clone().into_any_element()]),
+            showcase_group(
+                cx,
+                "Tooltip",
+                [div()
+                    .id("tooltip-wrap")
+                    .cursor_pointer()
+                    .on_hover(move |hovered, window, cx| {
+                        if *hovered {
+                            let bounds = tooltip_trigger.read(cx).bounds();
+                            show_tooltip(window, cx, "Tooltip via overlay host", bounds);
+                        } else {
+                            close_tooltip(window, cx);
+                        }
+                    })
+                    .child(self.tooltip_trigger.clone())
+                    .into_any_element()],
+            ),
+        ])
     }
 }

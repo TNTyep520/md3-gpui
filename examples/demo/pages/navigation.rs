@@ -3,7 +3,7 @@
 use gpui::{App, Entity, IntoElement, Render, Styled, Window, div, prelude::*, px};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Navigation 页视图。
 pub struct NavigationPage {
@@ -86,31 +86,42 @@ fn icon_strip(cx: &App) -> impl IntoElement {
 
 impl Render for NavigationPage {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        subsection(
-            cx,
-            "Navigation",
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(16.))
-                .child(icon_strip(cx))
-                .child(md3_gpui::TopAppBar::new("Navigation").leading(IconName::Menu))
-                .child(self.nav_bar.clone())
-                .child(
-                    div()
-                        .flex()
-                        .items_stretch()
-                        .gap(px(16.))
-                        .h(px(320.))
-                        .child(self.nav_rail.clone())
-                        .child(
-                            md3_gpui::Card::new()
-                                .outlined()
-                                .overflow_hidden()
-                                .w(px(360.))
-                                .child(self.nav_drawer.clone()),
-                        ),
-                ),
-        )
+        gallery([
+            showcase_group(cx, "Icons", [icon_strip(cx).into_any_element()]),
+            showcase_group(
+                cx,
+                "Top App Bar",
+                [div()
+                    .w_full()
+                    .child(md3_gpui::TopAppBar::new("Navigation").leading(IconName::Menu))
+                    .into_any_element()],
+            ),
+            showcase_group(
+                cx,
+                "Navigation Bar",
+                [div()
+                    .w_full()
+                    .child(self.nav_bar.clone())
+                    .into_any_element()],
+            ),
+            showcase_group(
+                cx,
+                "Navigation Rail & Drawer",
+                [div()
+                    .flex()
+                    .items_stretch()
+                    .gap(px(16.))
+                    .h(px(320.))
+                    .child(self.nav_rail.clone())
+                    .child(
+                        md3_gpui::Card::new()
+                            .outlined()
+                            .overflow_hidden()
+                            .w(px(360.))
+                            .child(self.nav_drawer.clone()),
+                    )
+                    .into_any_element()],
+            ),
+        ])
     }
 }

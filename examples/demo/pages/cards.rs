@@ -1,9 +1,9 @@
 //! Cards 页。
 
-use gpui::{App, Entity, IntoElement, Render, Window, div, prelude::*, px};
+use gpui::{App, Entity, IntoElement, Render, Window, prelude::*};
 use md3_gpui::prelude::*;
 
-use super::{demo_card, subsection};
+use super::{demo_card, gallery, showcase_group};
 
 /// Cards 页视图。
 pub struct CardsPage;
@@ -16,16 +16,14 @@ impl CardsPage {
 
 impl Render for CardsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        subsection(
+        gallery([showcase_group(
             cx,
             "Cards",
-            div()
-                .flex()
-                .flex_wrap()
-                .gap(px(12.))
-                .child(demo_card(cx, Card::new().elevated(), "Elevated card"))
-                .child(demo_card(cx, Card::new().filled(), "Filled card"))
-                .child(demo_card(cx, Card::new().outlined(), "Outlined card")),
-        )
+            [
+                demo_card(cx, Card::new().elevated(), "Elevated card").into_any_element(),
+                demo_card(cx, Card::new().filled(), "Filled card").into_any_element(),
+                demo_card(cx, Card::new().outlined(), "Outlined card").into_any_element(),
+            ],
+        )])
     }
 }

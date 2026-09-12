@@ -1,75 +1,98 @@
-//! MD3 Switch（对应 material-web 的 `md-switch`）。
+//! MD3 Switch(对齐 [m3fx](https://github.com/Glavo/m3fx) 的 `M3Switch` /
+//! `M3SwitchSkin`,Apache-2.0,© 2026 Glavo)。
 //!
-//! 规格：轨道 52×32dp 胶囊形；未选中手柄 16dp（outline 色）、
-//! 选中手柄 24dp（on-primary 色）。支持双图标样式（对齐 m3fx
-//! `M3SwitchSkin`）：选中/未选中各一个图标槽，拇指经过中点时
-//! 图标交叉淡化切换；提供图标时拇指恒为 24dp。
+//! 规格:轨道 52×32dp 胶囊、触摸目标 52×48dp;拇指 16dp(未选)/
+//! 24dp(选中或带图标)/ 28dp(按住,fastSpatial 弹簧放大);图标 16dp。
 //!
-//! 交互动画移植自 [m3fx](https://github.com/Glavo/m3fx) 的
-//! `M3SwitchSkin`（Apache-2.0，© 2026 Glavo）：手柄位置/尺寸与
-//! 轨道颜色由弹簧（defaultEffects）驱动；开关只有状态层、无涟漪。
+//! 交互(对齐 M3SwitchSkin 状态机):
+//! - 点击切换;按住后水平拖动 ≥4dp 进入拖动,拇指直接跟随指针,
+//!   释放按位置 ≥ 0.5 提交,状态真正变化才触发一次 on_change
+//!   (拖动提交不看释放位置;指针拖出控件 disarm、拖回 re-arm);
+//! - 按住即放大到 28dp,松开弹回;hover 时拇指变色
+//!   (选中 → primary_container,未选 → on_surface_variant);
+//! - 按压指示:跟随拇指中心的 40dp 状态圆(hover)+ 无界涟漪(按压)。
+//!
+//! API 只提供两种形态:`Switch::new(id)`(无图标)与
+//! `Switch::new(id).with_check_icon(true)`(选中对勾 / 未选关闭图标)。
 //!
 //! ```ignore
 //! Switch::new("wifi")
 //!     .checked(true)
+//!     .with_check_icon(true)
 //!     .on_change(|checked, _, _| println!("wifi: {checked}"))
 //!     .build(cx)   // -> Entity<SwitchState>
-//!
-//! // 带图标样式（选中/未选中各一图标，也可只给选中图标）
-//! Switch::new("power").selected_icon(IconName::Check)
-//!     .unselected_icon(Some(IconName::Close)).build(cx)
 //! ```
 
 use std::rc::Rc;
 use std::time::Instant;
 
 use gpui::{
-    App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, StatefulInteractiveElement as _, Styled, Window, div,
+    App, AppContext as _, Context, DispatchPhase, ElementId, Entity, Hsla, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Window, canvas, div,
     prelude::FluentBuilder as _, px,
 };
 
 use crate::icon::{Icon, IconName};
-use crate::interaction::{InteractiveSurface, wire_events};
+use crate::interaction::InteractiveSurface;
 use crate::motion::{Animatable, AnimatedComponent, AnimationDriver, MotionRole, lerp_color};
 use crate::theme::ActiveTheme;
 
 type ChangeHandler = Rc<dyn Fn(bool, &mut Window, &mut App) + 'static>;
 
-/// MD3 开关（状态保存在 [`SwitchState`] 内）。
+// 几何常量(dp,对齐 M3Switch 的 CSS 令牌)。
+/// 进入拖动所需的水平位移阈值(m3fx `DRAG_THRESHOLD`)。
+const DRAG_THRESHOLD: f32 = 4.0;
+/// 触摸目标高度(轨道垂直居中其中)。
+const TOUCH_TARGET_HEIGHT: f32 = 48.0;
+/// 按住时拇指直径。
+const PRESSED_HANDLE_SIZE: f32 = 28.0;
+/// 状态圆直径(中心跟随拇指)。
+const STATE_LAYER_SIZE: f32 = 40.0;
+/// hover 状态圆不透明度(按压指示由涟漪承担)。
+const STATE_LAYER_OPACITY: f32 = 0.08;
+
+/// MD3 开关构建器(`.build(cx)` 产出 [`SwitchState`])。
 pub struct Switch {
     id: ElementId,
     checked: bool,
     disabled: bool,
-    /// 选中态图标槽（对齐 m3fx `selectedIcon`）。
-    selected_icon: Option<IconName>,
-    /// 未选中态图标槽（对齐 m3fx `unselectedIcon`）。
-    unselected_icon: Option<IconName>,
+    check_icon: bool,
     on_change: Option<ChangeHandler>,
 }
 
-/// 开关的有状态部分：手柄位置/颜色动画。
+/// 开关的有状态部分。
 pub struct SwitchState {
     id: ElementId,
     checked: bool,
     disabled: bool,
-    selected_icon: Option<IconName>,
-    unselected_icon: Option<IconName>,
+    check_icon: bool,
     on_change: Option<ChangeHandler>,
-    /// 0 = 未选中，1 = 选中。
+    /// 拇指位置 0..1(0=未选端,1=选中端;拖动中直接跟随指针)。
     progress: Animatable,
+    /// 按压过渡(0=常态,1=拇指放大到 28dp;fastSpatial 弹簧进出)。
+    press_progress: Animatable,
+    /// 上一帧的按压状态(用于检测按压沿并驱动放大弹簧)。
+    pressed_observed: bool,
+    /// 主键已按下(拖拽会话进行中;指针拖出控件不中断)。
+    pressed: bool,
+    /// 已越过拖动阈值,拇指进入跟随模式。
+    dragging: bool,
+    /// 按下时的指针 X(判定拖动阈值)。
+    drag_start_x: Pixels,
+    /// 按下时(指针X − 拇指中心X)的抓取偏移,拖动中保持不变。
+    grab_offset: Pixels,
     surface: InteractiveSurface,
 }
 
 impl Switch {
-    /// 创建开关构建器。
+    /// 创建开关构建器(默认无图标)。
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
             checked: false,
             disabled: false,
-            selected_icon: None,
-            unselected_icon: None,
+            check_icon: false,
             on_change: None,
         }
     }
@@ -86,32 +109,14 @@ impl Switch {
         self
     }
 
-    /// 选中态图标（显示在拇指内）。
-    pub fn selected_icon(mut self, icon: IconName) -> Self {
-        self.selected_icon = Some(icon);
+    /// 带图标变体:选中态拇指内显示对勾、未选中态显示关闭图标
+    /// (16dp,对齐 m3fx 双图标模式)。
+    pub fn with_check_icon(mut self, check_icon: bool) -> Self {
+        self.check_icon = check_icon;
         self
     }
 
-    /// 未选中态图标（`None` 则未选中时无图标）。
-    pub fn unselected_icon(mut self, icon: Option<IconName>) -> Self {
-        self.unselected_icon = icon;
-        self
-    }
-
-    /// 便捷方法：带图标样式（选中态显示勾图标）。
-    ///
-    /// 等价于 `selected_icon(IconName::Check)`；传 `false` 清除两个图标槽。
-    pub fn show_icon(mut self, show: bool) -> Self {
-        if show {
-            self.selected_icon = Some(IconName::Check);
-        } else {
-            self.selected_icon = None;
-            self.unselected_icon = None;
-        }
-        self
-    }
-
-    /// 设置切换回调（参数为新选中态）。
+    /// 设置切换回调(参数为新选中态;仅在状态真正变化时触发)。
     pub fn on_change(mut self, handler: impl Fn(bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_change = Some(Rc::new(handler));
         self
@@ -120,15 +125,23 @@ impl Switch {
     /// 构建有状态组件实体。
     pub fn build(self, cx: &mut App) -> Entity<SwitchState> {
         let checked = self.checked;
+        let mut surface = InteractiveSurface::new();
+        // m3fx:无界涟漪,最大半径 = stateLayerSize / 2 = 20dp
+        surface.set_ripple_max_radius(Some(px(20.)));
         cx.new(|_| SwitchState {
             id: self.id,
             checked,
             disabled: self.disabled,
-            selected_icon: self.selected_icon,
-            unselected_icon: self.unselected_icon,
+            check_icon: self.check_icon,
             on_change: self.on_change,
             progress: Animatable::new(if checked { 1.0 } else { 0.0 }, 1.0e-3),
-            surface: InteractiveSurface::new(),
+            press_progress: Animatable::new(0.0, 1.0e-3),
+            pressed_observed: false,
+            pressed: false,
+            dragging: false,
+            drag_start_x: px(0.),
+            grab_offset: px(0.),
+            surface,
         })
     }
 }
@@ -139,32 +152,132 @@ impl SwitchState {
         self.checked
     }
 
-    /// 替换切换回调（用于构造后接线）。
+    /// 替换切换回调(用于构造后接线)。
     pub fn set_on_change(&mut self, handler: impl Fn(bool, &mut Window, &mut App) + 'static) {
         self.on_change = Some(Rc::new(handler));
     }
 
-    /// 直接设置选中态（带动画）。
+    /// 直接设置选中态(带动画;程序化设置不触发 on_change)。
     pub fn set_checked(&mut self, checked: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.checked == checked {
             return;
         }
         self.checked = checked;
-        let spec = *cx.theme().motion().spec(MotionRole::DefaultEffects);
-        self.progress
-            .animate_to(if checked { 1.0 } else { 0.0 }, &spec, Instant::now());
+        self.animate_thumb_to(if checked { 1.0 } else { 0.0 }, window, cx);
+    }
+
+    /// 以 fastSpatial 弹簧把拇指动画到目标位置(m3fx `animateThumbPosition`)。
+    fn animate_thumb_to(&mut self, target: f64, window: &mut Window, cx: &mut Context<Self>) {
+        let spec = *cx.theme().motion().spec(MotionRole::FastSpatial);
+        self.progress.animate_to(target, &spec, Instant::now());
         if self.progress.is_running() {
             self.schedule_next(window, cx);
         }
         cx.notify();
     }
+
+    /// 提交选中态:拇指弹簧回端点;状态真正变化才触发一次 on_change。
+    fn apply_selection(&mut self, select: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let changed = select != self.checked;
+        self.checked = select;
+        self.animate_thumb_to(if select { 1.0 } else { 0.0 }, window, cx);
+        if changed && let Some(handler) = self.on_change.clone() {
+            handler(select, window, cx);
+        }
+    }
+
+    /// 主键按下:arm(拇指放大)+ 在按压点播放涟漪,记录拖拽会话参数。
+    fn on_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.disabled {
+            return;
+        }
+        let now = Instant::now();
+        let motion = cx.theme().motion().clone();
+        self.surface.on_press(event.position, &motion, now);
+
+        let bounds = self.surface.bounds.get();
+        let local_x = event.position.x - bounds.origin.x;
+        let center_x = px(TRACK_HEIGHT_LOCAL)
+            + px(TRACK_WIDTH_LOCAL - TRACK_HEIGHT_LOCAL) * self.progress.value() as f32;
+        self.pressed = true;
+        self.dragging = false;
+        self.drag_start_x = event.position.x;
+        self.grab_offset = local_x - center_x;
+        cx.notify();
+    }
+
+    /// 拖动跟随(m3fx:越过阈值后拇指直接跟随指针,无弹簧滞后)。
+    fn drag_move(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
+        if !self.pressed || self.disabled {
+            return;
+        }
+        if !self.dragging {
+            if f32::from(position.x - self.drag_start_x).abs() < DRAG_THRESHOLD {
+                return;
+            }
+            self.dragging = true;
+            self.progress.stop();
+        }
+        let bounds = self.surface.bounds.get();
+        // 指针拖回控件内时 re-arm(m3fx:离开 disarm、回来 re-arm)
+        if bounds.contains(&position) && !self.surface.pressed {
+            self.surface.pressed = true;
+            cx.notify();
+        }
+        let local_x = position.x - bounds.origin.x;
+        let handle_center = local_x - self.grab_offset;
+        let pos = f32::from(handle_center - px(TRACK_HEIGHT_LOCAL))
+            / f32::from(px(TRACK_WIDTH_LOCAL - TRACK_HEIGHT_LOCAL));
+        self.progress.snap_to(f64::from(pos.clamp(0.0, 1.0)));
+        cx.notify();
+    }
+
+    /// 主键释放:提交拖动或处理点击(m3fx releasedInside 语义)。
+    fn drag_end(&mut self, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.pressed {
+            return;
+        }
+        self.pressed = false;
+        let now = Instant::now();
+        let motion = cx.theme().motion().clone();
+        self.surface.on_release(&motion, now);
+
+        let inside = self.surface.bounds.get().contains(&position);
+        if self.dragging {
+            self.dragging = false;
+            // 拖动提交不看释放位置
+            self.apply_selection(self.progress.value() >= 0.5, window, cx);
+        } else if inside {
+            // 纯点击:切换
+            self.apply_selection(!self.checked, window, cx);
+        } else {
+            // 控件外释放且未进入拖动:弹回当前端点
+            self.animate_thumb_to(if self.checked { 1.0 } else { 0.0 }, window, cx);
+        }
+        cx.notify();
+    }
+
+    /// div 层释放回调(兜底;与窗口级监听幂等)。
+    fn on_mouse_up(&mut self, event: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.drag_end(event.position, window, cx);
+    }
 }
+
+/// 拖拽数学用的轨道尺寸(dp;与 CSS 令牌默认值一致)。
+const TRACK_WIDTH_LOCAL: f32 = 52.0;
+const TRACK_HEIGHT_LOCAL: f32 = 32.0;
 
 impl AnimatedComponent for SwitchState {
     fn step(&mut self, now: Instant) -> bool {
         let running = self.progress.tick(now);
         let surface_running = self.surface.step(now);
-        running || surface_running
+        let press_running = self.press_progress.tick(now);
+        running || surface_running || press_running
     }
 
     fn driver_mut(&mut self) -> &mut AnimationDriver {
@@ -174,8 +287,22 @@ impl AnimatedComponent for SwitchState {
 
 impl Render for SwitchState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.progress.is_running() || self.surface.is_animating() {
+        // 动画循环:仍有动画时调度下一帧
+        if self.progress.is_running()
+            || self.surface.is_animating()
+            || self.press_progress.is_running()
+        {
             self.schedule_next(window, cx);
+        }
+
+        // 按压沿检测:按住即以 fastSpatial 弹簧放大到 28dp,松开弹回
+        // (m3fx arm/disarm,无长按计时器)
+        if self.surface.pressed != self.pressed_observed {
+            self.pressed_observed = self.surface.pressed;
+            let spec = *cx.theme().motion().spec(MotionRole::FastSpatial);
+            let target = if self.surface.pressed { 1.0 } else { 0.0 };
+            self.press_progress
+                .animate_to(target, &spec, Instant::now());
         }
 
         let theme = cx.theme();
@@ -184,79 +311,133 @@ impl Render for SwitchState {
         let style = crate::styles::selection::SwitchStyle::resolve(theme.token_set(), disabled);
         let state_layer = *theme.state_layer();
         let p = self.progress.value() as f32;
+        let press = self.press_progress.value() as f32;
 
         let track_bg = lerp_color(style.track_off, style.track_on, p);
-        let handle_bg = lerp_color(style.handle_off, style.handle_on, p);
 
-        // 几何：无图标时手柄 16dp -> 24dp；带图标时恒为 24dp
-        //（对齐 m3fx `withIconHandleSize`）
-        let (track_w_tok, track_h_tok) = (style.track_size.0, style.track_size.1);
-        let has_icons = self.selected_icon.is_some() || self.unselected_icon.is_some();
-        let thumb_size = if has_icons {
+        // 拇指颜色(对齐 m3fx 双层交叉淡化):未选层(outline,hover/armed
+        // → on_surface_variant)与选中层(on_primary,→ primary_container)
+        // 各自按交互进度渐变,两层再按拇指位置连续交叉——跨过中线无跳变
+        let hover_t = if disabled {
+            0.0
+        } else {
+            self.surface.hover_progress() as f32
+        };
+        let handle_off = lerp_color(style.handle_off, colors.on_surface_variant, hover_t);
+        let handle_on = lerp_color(style.handle_on, colors.primary_container, hover_t);
+        let handle_bg = lerp_color(handle_off, handle_on, p);
+
+        // 几何(对齐 M3SwitchSkin.layoutThumb):拇指中心 X =
+        // 轨道高/2 → 轨道宽 − 轨道高/2;直径 16/24(带图标恒 24),
+        // 按住弹簧放大到 28
+        let (track_w, track_h) = (style.track_size.0, style.track_size.1);
+        let rest_size = if self.check_icon {
             style.thumb_on
         } else {
             style.thumb_off + (style.thumb_on - style.thumb_off) * p
         };
-        let x_start = if has_icons {
-            style.thumb_margin.1
+        let thumb_size = rest_size + (px(PRESSED_HANDLE_SIZE) - rest_size) * press;
+        let center_x = track_h / 2. + (track_w - track_h) * p;
+        let thumb_x = center_x - thumb_size / 2.;
+        let thumb_y = (px(TOUCH_TARGET_HEIGHT) - thumb_size) / 2.;
+
+        // 状态圆:40dp、中心跟随拇指(hover 指示;按压指示由涟漪承担)
+        let state_color = lerp_color(colors.on_surface, colors.primary, p);
+        let state_opacity = if disabled {
+            0.0
         } else {
-            style.thumb_margin.0
+            hover_t * STATE_LAYER_OPACITY
         };
-        let thumb_x = x_start + (track_w_tok - px(4.) - style.thumb_on - x_start) * p;
-        let thumb_y = (track_h_tok - thumb_size) / 2.0;
 
         // 描边随选中淡出
         let border_alpha = (1.0 - p * 2.0).clamp(0.0, 1.0);
         let border_color = style
             .border_off
-            .map(|c| lerp_color(c, gpui::Hsla::transparent_black(), 1.0 - border_alpha));
+            .map(|c| lerp_color(c, Hsla::transparent_black(), 1.0 - border_alpha));
 
-        // 图标槽：拇指越过中点时切换显示的图标，并在中点两侧交叉淡化
-        //（对齐 m3fx `updateDisplayedIcon` / `updateIconOpacity`）
-        let same_icons = matches!(
-            (self.selected_icon, self.unselected_icon),
-            (Some(a), Some(b)) if a == b
-        );
-        let (displayed_icon, icon_alpha) = if p >= 0.5 {
+        // 图标(带图标变体):选中对勾 / 未选关闭,位置过半切换并以
+        // V 形透明度交叉淡化(对齐 m3fx `updateIconOpacity`);
+        // 颜色对齐 selection.css:选中 primary、未选 surface-container-highest,
+        // 禁用均 38%(选中禁用为 on-surface)
+        let (displayed_icon, icon_color) = if p >= 0.5 {
             (
-                self.selected_icon,
-                if same_icons {
-                    1.0
+                IconName::Check,
+                if disabled {
+                    colors.on_surface.opacity(state_layer.disabled_content)
                 } else {
-                    (2.0 * p - 1.0).clamp(0.0, 1.0)
+                    colors.primary
                 },
             )
         } else {
             (
-                self.unselected_icon,
-                if same_icons {
-                    1.0
+                IconName::Close,
+                if disabled {
+                    colors
+                        .surface_container_highest
+                        .opacity(state_layer.disabled_content)
                 } else {
-                    (1.0 - 2.0 * p).clamp(0.0, 1.0)
+                    colors.surface_container_highest
                 },
             )
         };
-        let icon_color = if disabled {
-            colors.surface_container_highest
-        } else if p >= 0.5 {
-            colors.on_primary_container
+        let icon_alpha = if p >= 0.5 {
+            2.0 * p - 1.0
         } else {
-            colors.on_surface_variant
-        };
+            1.0 - 2.0 * p
+        }
+        .clamp(0.0, 1.0);
 
-        let track_w = style.track_size.0;
-        let track_h = style.track_size.1;
-
-        let base = div()
+        // 外层:触摸目标 52×48,不裁剪(状态圆/涟漪允许越出轨道)
+        let entity = cx.entity();
+        let mut root = div()
             .id(self.id.clone())
+            .relative()
+            .w(px(TRACK_WIDTH_LOCAL))
+            .h(px(TOUCH_TARGET_HEIGHT))
+            .flex_none()
+            .when(!disabled, |el| el.cursor_pointer());
+
+        if !disabled {
+            let motion = theme.motion().clone();
+            let hover_entity = entity.clone();
+            root = root
+                .on_hover(move |hovered, window, cx| {
+                    hover_entity.update(cx, |state, cx| {
+                        state.surface.set_hovered(*hovered, &motion, Instant::now());
+                        if state.surface.is_animating()
+                            || state.progress.is_running()
+                            || state.press_progress.is_running()
+                        {
+                            state.schedule_next(window, cx);
+                        }
+                        cx.notify();
+                    });
+                })
+                .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+                .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
+                .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up));
+        }
+
+        // 状态圆(最底层,中心跟随拇指)
+        root = root.child(
+            div()
+                .absolute()
+                .left(center_x - px(STATE_LAYER_SIZE / 2.))
+                .top((px(TOUCH_TARGET_HEIGHT) - px(STATE_LAYER_SIZE)) / 2.)
+                .size(px(STATE_LAYER_SIZE))
+                .rounded_full()
+                .bg(state_color.opacity(state_opacity)),
+        );
+
+        // 轨道(垂直居中于触摸目标)+ 描边层
+        let track = div()
+            .absolute()
+            .left(px(0.))
+            .top((px(TOUCH_TARGET_HEIGHT) - track_h) / 2.)
             .w(track_w)
             .h(track_h)
-            .relative()
-            .flex_none()
             .rounded_full()
             .bg(track_bg)
-            // 描边画在独立的圆环层：轨道容器本身不带 border，
-            // 避免绝对定位的拇指相对 padding box 定位而整体偏移 2px
             .when_some(border_color, |el, color| {
                 el.child(
                     div()
@@ -266,54 +447,67 @@ impl Render for SwitchState {
                         .border_2()
                         .border_color(color),
                 )
-            })
-            .when(!disabled, |el| el.cursor_pointer().overflow_hidden());
+            });
+        root = root.child(track);
 
-        let entity = cx.entity();
-        let base = if disabled {
-            base
-        } else {
-            let base = wire_events(base, &entity, theme.motion(), |s: &mut Self| &mut s.surface);
-            let base = self
+        // 涟漪(无界,20dp,按压点为心)+ 边界捕获
+        if !disabled {
+            let ripple_color = lerp_color(colors.on_surface, colors.primary, p);
+            root = self
                 .surface
-                .overlay(colors.on_surface, state_layer.pressed)
-                .apply(base);
-            base.child(self.surface.bounds.capture_element())
-        };
+                .overlay_unclipped(ripple_color, state_layer.pressed)
+                .apply(root);
+            root = root.child(self.surface.bounds.capture_element());
+        }
 
-        let base = if disabled {
-            base
-        } else {
-            let toggle_entity = entity.clone();
-            base.on_click(move |_event, window, cx| {
-                toggle_entity.update(cx, |state, cx| {
-                    let next = !state.checked;
-                    state.set_checked(next, window, cx);
-                    if let Some(handler) = state.on_change.clone() {
-                        handler(next, window, cx);
-                    }
-                });
-            })
-        };
-
-        base.child(
-            div()
+        // 拖拽会话中注册窗口级监听(paint 阶段):指针元素外仍持续跟踪
+        if !disabled && self.pressed {
+            let entity = entity.clone();
+            root = root.child(
+                canvas(
+                    |_, _, _| {},
+                    move |_, _, window, _| {
+                        let move_entity = entity.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _window, cx| {
+                            if phase != DispatchPhase::Bubble {
+                                return;
+                            }
+                            move_entity.update(cx, |state, cx| state.drag_move(event.position, cx));
+                        });
+                        window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
+                            if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
+                                return;
+                            }
+                            entity
+                                .update(cx, |state, cx| state.drag_end(event.position, window, cx));
+                        });
+                    },
+                )
                 .absolute()
-                .left(thumb_x)
-                .top(thumb_y)
-                .size(thumb_size)
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_full()
-                .bg(handle_bg)
-                .when_some(displayed_icon.filter(|_| icon_alpha > 0.0), |el, icon| {
-                    el.child(
-                        Icon::new(icon)
-                            .size(style.icon_size)
-                            .color(icon_color.opacity(icon_alpha)),
-                    )
-                }),
-        )
+                .inset_0(),
+            );
+        }
+
+        // 拇指(最顶层,带图标槽)
+        let mut thumb = div()
+            .absolute()
+            .left(thumb_x)
+            .top(thumb_y)
+            .size(thumb_size)
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_full()
+            .bg(handle_bg);
+        if self.check_icon {
+            thumb = thumb.when(icon_alpha > 0.0, |el| {
+                el.child(
+                    Icon::new(displayed_icon)
+                        .size(style.icon_size)
+                        .color(icon_color.opacity(icon_alpha)),
+                )
+            });
+        }
+        root.child(thumb)
     }
 }

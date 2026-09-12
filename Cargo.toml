@@ -12,7 +12,6 @@ anyhow = "1"
 mcu-hct = { version = "0.2.1" }
 mcu-palettes = { version = "0.2.0" }
 mcu-dynamiccolor = { version = "0.2.4" }
-wuff = { version = "0.2.9" }
 
 [dev-dependencies]
 # demo 示例需要平台启动层（zed 已将平台后端拆分为 gpui_platform）
@@ -24,8 +23,6 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
     "wayland",
     "runtime_shaders",
 ] }
-ttf-parser = { version = "0.25.1" }
-wuff = { version = "0.2.9" }
 
 [[example]]
 name = "demo"

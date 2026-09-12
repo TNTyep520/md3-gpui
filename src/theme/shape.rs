@@ -56,22 +56,6 @@ impl Shapes {
             full: px(999.),
         }
     }
-
-    /// Expressive（2025）圆角刻度：整体更大。
-    pub fn expressive() -> Self {
-        Self {
-            none: px(0.),
-            extra_small: px(6.),
-            small: px(10.),
-            medium: px(16.),
-            large: px(24.),
-            large_increased: px(28.),
-            extra_large: px(32.),
-            extra_large_increased: px(40.),
-            extra_extra_large: px(48.),
-            full: px(999.),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -84,8 +68,5 @@ mod tests {
         assert_eq!(b.extra_small, px(4.));
         assert_eq!(b.large_increased, px(20.));
         assert_eq!(b.extra_extra_large, px(48.));
-        let e = Shapes::expressive();
-        assert_eq!(e.medium, px(16.));
-        assert_eq!(e.extra_large_increased, px(40.));
     }
 }

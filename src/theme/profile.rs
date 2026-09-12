@@ -5,6 +5,8 @@
 //!
 //! Profile 是一份"预设身份"，决定动态色的规格版本、色彩风格，
 //! 以及 typography / shape / motion / 组件令牌的默认家族。
+//!
+//! 当前仅提供 2021 基线（Material Design 3 baseline）。
 
 use mcu_dynamiccolor::{SpecVersion, Variant};
 
@@ -14,8 +16,6 @@ pub enum Profile {
     /// 2021 基线（Material Design 3 baseline）：SPEC_2021 + TONAL_SPOT。
     #[default]
     Baseline2021,
-    /// 2025 Expressive：SPEC_2025 + EXPRESSIVE 色彩风格 + Expressive 令牌家族。
-    Expressive2025,
 }
 
 impl Profile {
@@ -23,7 +23,6 @@ impl Profile {
     pub fn color_spec_version(self) -> SpecVersion {
         match self {
             Profile::Baseline2021 => SpecVersion::Spec2021,
-            Profile::Expressive2025 => SpecVersion::Spec2025,
         }
     }
 
@@ -31,7 +30,6 @@ impl Profile {
     pub fn color_style(self) -> Variant {
         match self {
             Profile::Baseline2021 => Variant::TonalSpot,
-            Profile::Expressive2025 => Variant::Expressive,
         }
     }
 }
@@ -46,11 +44,6 @@ mod tests {
             Profile::Baseline2021.color_spec_version(),
             SpecVersion::Spec2021
         );
-        assert_eq!(
-            Profile::Expressive2025.color_spec_version(),
-            SpecVersion::Spec2025
-        );
         assert_eq!(Profile::Baseline2021.color_style(), Variant::TonalSpot);
-        assert_eq!(Profile::Expressive2025.color_style(), Variant::Expressive);
     }
 }

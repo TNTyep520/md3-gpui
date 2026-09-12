@@ -25,14 +25,14 @@ use std::time::Instant;
 use gpui::{
     App, AppContext as _, ClickEvent, Context, ElementId, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    Window, div, prelude::FluentBuilder as _,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::icon::{Icon, IconName};
 use crate::interaction::{InteractiveSurface, wire_events};
 use crate::motion::{AnimatedComponent, AnimationDriver};
 use crate::styles::button::ButtonStyle;
-use crate::theme::ActiveTheme;
+use crate::theme::{ActiveTheme, Elevation};
 
 pub use crate::styles::button::ButtonVariant;
 
@@ -217,6 +217,8 @@ impl Render for ButtonState {
         let base = div()
             .id(self.id.clone())
             .h(style.height)
+            // Compose M3：MinWidth = 58dp
+            .min_w(px(58.))
             .flex()
             .flex_none()
             .items_center()
@@ -241,8 +243,19 @@ impl Render for ButtonState {
             base
         };
 
-        let base = if style.elevation != crate::theme::Elevation::Level0 && !self.disabled {
-            base.shadow(style.elevation.shadows(style.shadow_color))
+        // Compose M3：hover 时 Filled 升为 1 级、Elevated 升为 2 级阴影
+        let hovered = self.surface.hovered && !self.disabled;
+        let elevation = if hovered {
+            match self.variant {
+                ButtonVariant::Filled => Elevation::Level1,
+                ButtonVariant::Elevated => Elevation::Level2,
+                _ => style.elevation,
+            }
+        } else {
+            style.elevation
+        };
+        let base = if elevation != Elevation::Level0 && !self.disabled {
+            base.shadow(elevation.shadows(style.shadow_color))
         } else {
             base
         };
@@ -256,7 +269,11 @@ impl Render for ButtonState {
             });
             let base = self
                 .surface
-                .overlay(style.state_layer_color, style.state_layer_opacity)
+                .overlay(
+                    style.state_layer_color,
+                    style.state_layer_opacity,
+                    style.corner_radius,
+                )
                 .apply(base);
             base.child(self.surface.bounds.capture_element())
         };

@@ -3,7 +3,7 @@
 use gpui::{App, Entity, IntoElement, Render, Styled, Window, div, prelude::*, px};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Tabs 页视图。
 pub struct TabsPage {
@@ -32,18 +32,24 @@ impl Render for TabsPage {
         let typography = *theme.typography();
         let selected_tab = self.tabbar.read(cx).selected();
 
-        subsection(
+        gallery([showcase_group(
             cx,
-            "Primary tabs",
-            div().flex().flex_col().child(self.tabbar.clone()).child(
-                div().p(px(16.)).child(
-                    typography
-                        .body_medium
-                        .apply(div())
-                        .text_color(colors.on_surface_variant)
-                        .child(format!("Tab {} selected", selected_tab + 1)),
-                ),
-            ),
-        )
+            "Primary Tabs",
+            [div()
+                .flex()
+                .flex_col()
+                .w_full()
+                .child(self.tabbar.clone())
+                .child(
+                    div().pt(px(12.)).child(
+                        typography
+                            .body_medium
+                            .apply(div())
+                            .text_color(colors.on_surface_variant)
+                            .child(format!("Tab {} selected", selected_tab + 1)),
+                    ),
+                )
+                .into_any_element()],
+        )])
     }
 }

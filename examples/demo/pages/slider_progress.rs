@@ -6,7 +6,7 @@
 use gpui::{App, Entity, IntoElement, Render, Styled, Window, div, prelude::*, px};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Slider & Progress 页视图。
 pub struct SliderProgressPage {
@@ -31,19 +31,21 @@ impl Render for SliderProgressPage {
         let typography = *theme.typography();
         let slider_value = self.slider.read(cx).value();
 
-        subsection(
-            cx,
-            "Slider & Progress",
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(16.))
-                .child(self.slider.clone())
-                .child(
+        gallery([
+            showcase_group(
+                cx,
+                "Continuous",
+                [div().w_full().child(self.slider.clone()).into_any_element()],
+            ),
+            showcase_group(
+                cx,
+                "Standard Linear",
+                [
                     div()
                         .flex()
                         .items_center()
                         .gap(px(16.))
+                        .w_full()
                         .child(
                             div().flex_1().child(
                                 md3_gpui::LinearProgress::new("lp").value(slider_value / 100.),
@@ -55,10 +57,20 @@ impl Render for SliderProgressPage {
                                 .apply(div())
                                 .text_color(colors.on_surface_variant)
                                 .child(format!("{slider_value:.0}%")),
-                        ),
-                )
-                .child(md3_gpui::LinearProgress::new("lp-ind").indeterminate())
-                .child(md3_gpui::CircularProgress::new().size(px(40.))),
-        )
+                        )
+                        .into_any_element(),
+                    md3_gpui::LinearProgress::new("lp-ind")
+                        .indeterminate()
+                        .into_any_element(),
+                ],
+            ),
+            showcase_group(
+                cx,
+                "Standard Circular",
+                [md3_gpui::CircularProgress::new()
+                    .size(px(40.))
+                    .into_any_element()],
+            ),
+        ])
     }
 }

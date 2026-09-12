@@ -3,7 +3,7 @@
 use gpui::{App, Entity, IntoElement, Render, Styled, Window, div, prelude::*, px};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Text fields 页视图。
 pub struct TextFieldsPage {
@@ -65,18 +65,30 @@ impl TextFieldsPage {
 
 impl Render for TextFieldsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        subsection(
-            cx,
-            "Text fields",
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(16.))
-                .max_w(px(480.))
-                .child(self.seed_field.clone())
-                .child(self.tf_name.clone())
-                .child(self.tf_error.clone())
-                .child(self.tf_disabled.clone()),
-        )
+        gallery([
+            showcase_group(
+                cx,
+                "Text Fields",
+                [div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(16.))
+                    .w_full()
+                    .child(self.tf_name.clone())
+                    .child(self.tf_error.clone())
+                    .child(self.tf_disabled.clone())
+                    .into_any_element()],
+            ),
+            showcase_group(
+                cx,
+                "Seed Color",
+                [div()
+                    .flex()
+                    .flex_col()
+                    .w_full()
+                    .child(self.seed_field.clone())
+                    .into_any_element()],
+            ),
+        ])
     }
 }

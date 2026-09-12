@@ -163,6 +163,7 @@ impl Render for TabBarState {
         let colors = theme.colors();
         let selected = self.selected;
         let on_change = self.on_change.clone();
+        let entity = cx.entity();
         let label_style = theme.typography().title_small;
         let has_icons = self.tabs.iter().any(|t| t.icon.is_some());
         let height = if has_icons { px(64.) } else { px(48.) };
@@ -177,6 +178,7 @@ impl Render for TabBarState {
             .id(self.id.clone())
             .w_full()
             .flex()
+            .overflow_hidden()
             .bg(surface)
             .border_b_1()
             .border_color(outline_variant)
@@ -193,6 +195,7 @@ impl Render for TabBarState {
                     colors.on_surface
                 };
                 let on_change = on_change.clone();
+                let click_entity = entity.clone();
                 let tab_el = div()
                     .id((SharedString::from(format!("{}-tab", self.id)), ix))
                     .relative()
@@ -207,20 +210,29 @@ impl Render for TabBarState {
                     .text_color(fg)
                     .hover(move |s| s.bg(layer.opacity(HOVER_OPACITY)))
                     .active(move |s| s.bg(layer.opacity(PRESSED_OPACITY)))
-                    .when_some(on_change.clone(), |el, handler| {
-                        el.on_click(move |_, window, cx| handler(ix, window, cx))
+                    // 点击:组件内部先完成选中(弹簧滑动),
+                    // 状态真正变化才触发一次 on_change
+                    .on_click(move |_, window, cx| {
+                        click_entity.update(cx, |state, cx| {
+                            let changed = ix != state.selected;
+                            state.select(ix, window, cx);
+                            if changed && let Some(handler) = on_change.clone() {
+                                handler(ix, window, cx);
+                            }
+                        });
                     })
                     .when_some(tab.icon, |el, icon| el.child(Icon::new(icon).size(px(24.))));
                 let tab_el = label_style.apply(tab_el).child(tab.label.clone());
                 // 选中指示条：3dp 高、圆角上边、宽度收窄。
                 // 画在选中标签内部并以弹簧位置做相对偏移
-                //（一个标签宽度 = 1.0 个 relative 单位），滑动时溢出标签边界。
+                //（一个标签宽度 = 1.0 个 relative 单位，0.5 为标签中心，
+                // 滑动时随偏移跨标签平移，由容器 overflow_hidden 裁剪）。
                 tab_el.when(is_selected, |el| {
                     el.child(
                         div()
                             .absolute()
                             .bottom_0()
-                            .left(relative(indicator_pos - ix as f32))
+                            .left(relative(0.5 + indicator_pos - ix as f32))
                             .w(px(48.))
                             .ml(px(-24.))
                             .flex()

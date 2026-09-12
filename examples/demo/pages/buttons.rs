@@ -1,9 +1,9 @@
 //! Buttons 页：五种变体按钮演示。
 
-use gpui::{App, Entity, IntoElement, Render, Styled, Window, div, prelude::*, px};
+use gpui::{App, Entity, IntoElement, Render, Window, prelude::*};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Buttons 页视图。
 pub struct ButtonsPage {
@@ -56,21 +56,18 @@ impl ButtonsPage {
 
 impl Render for ButtonsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        subsection(
+        gallery([showcase_group(
             cx,
-            "Common buttons",
-            div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap(px(12.))
-                .child(self.b_filled.clone())
-                .child(self.b_tonal.clone())
-                .child(self.b_elevated.clone())
-                .child(self.b_outlined.clone())
-                .child(self.b_text.clone())
-                .child(self.b_icon.clone())
-                .child(self.b_disabled.clone()),
-        )
+            "Button Variants",
+            [
+                self.b_filled.clone().into_any_element(),
+                self.b_tonal.clone().into_any_element(),
+                self.b_elevated.clone().into_any_element(),
+                self.b_outlined.clone().into_any_element(),
+                self.b_text.clone().into_any_element(),
+                self.b_icon.clone().into_any_element(),
+                self.b_disabled.clone().into_any_element(),
+            ],
+        )])
     }
 }

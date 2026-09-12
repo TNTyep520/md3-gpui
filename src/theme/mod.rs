@@ -12,8 +12,6 @@
 //!     md3_gpui::init(cx);                          // 安装默认亮色主题
 //!     // 或者：种子色动态色主题
 //!     Theme::set(cx, Theme::from_seed(0x6750A4, ThemeMode::Light, Profile::Baseline2021));
-//!     // 或者：Expressive profile
-//!     Theme::set(cx, Theme::from_seed(0x6750A4, ThemeMode::Dark, Profile::Expressive2025));
 //! });
 //!
 //! // 在任意 render 中：
@@ -223,12 +221,5 @@ mod tests {
         let theme = Theme::light();
         assert_eq!(theme.mode(), ThemeMode::Light);
         assert_eq!(theme.profile(), Profile::Baseline2021);
-    }
-
-    #[test]
-    fn expressive_theme_uses_expressive_tokens() {
-        let theme = Theme::from_seed(0x6750A4, ThemeMode::Light, Profile::Expressive2025);
-        assert_eq!(theme.shapes().extra_small, gpui::px(6.));
-        assert_eq!(theme.typography().display_large.size, gpui::px(64.));
     }
 }

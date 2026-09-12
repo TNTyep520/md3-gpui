@@ -17,8 +17,8 @@
 //!         .with_assets(Md3Assets)          // 安装内嵌图标资源
 //!         .run(|cx| {
 //!             md3_gpui::init(cx);          // 安装默认（亮色）主题
-//!             // 或者：动态色 + Expressive profile
-//!             // Theme::set(cx, Theme::from_seed(0x6750A4, ThemeMode::Light, Profile::Expressive2025));
+//!             // 或者：自定义种子色动态色
+//!             // Theme::set(cx, Theme::from_seed(0x006A6A, ThemeMode::Light, Profile::Baseline2021));
 //!             cx.open_window(WindowOptions::default(), |_, cx| {
 //!                 cx.new(|_| MyApp)
 //!             }).unwrap();
@@ -53,13 +53,7 @@ pub use theme::{ActiveTheme, Theme, ThemeMode};
 
 use gpui::App;
 
-/// 注册内嵌字体（Roboto 三字重 + Material Symbols 图标子集）并安装
-/// 默认（亮色）主题。若已有主题则不覆盖。
-///
-/// 字体随库内置（woff2 子集化以控制体积），应用零字体代码；注册失败仅
-/// 记录不阻断启动。图标子集只含 [`crate::icon::IconName`] 内置图标——
-/// 需要 [`crate::icon::IconName::Custom`] 任意图标时，自行下载完整
-/// Material Symbols 字体并额外注册（生成方式见 README 字体章节）。
+/// 注册内嵌字体并安装默认（亮色）主题。若已有主题则不覆盖。
 pub fn init(cx: &mut App) {
     if let Err(err) = fonts::install(cx) {
         eprintln!("md3-gpui: failed to register embedded fonts: {err}");

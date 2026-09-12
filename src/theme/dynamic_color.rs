@@ -140,11 +140,4 @@ mod tests {
         let surface: gpui::Rgba = scheme.surface.into();
         assert!(surface.r < 0.2 && surface.g < 0.2 && surface.b < 0.2);
     }
-
-    #[test]
-    fn expressive_scheme_differs_from_baseline() {
-        let light_a = color_scheme_from_seed(0x6750A4, false, Profile::Baseline2021);
-        let light_b = color_scheme_from_seed(0x6750A4, false, Profile::Expressive2025);
-        assert_ne!(light_a.surface, light_b.surface);
-    }
 }

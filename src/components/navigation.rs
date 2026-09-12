@@ -33,6 +33,47 @@ use crate::theme::ActiveTheme;
 
 type ChangeHandler = Rc<dyn Fn(usize, &mut Window, &mut App) + 'static>;
 
+/// 可选中导航族(Bar / Rail / Drawer)的内部状态接口:
+/// 点击项时由组件内部完成选中,状态真正变化才触发 on_change。
+trait NavSelection: 'static {
+    /// 当前选中下标。
+    fn selected_index(&self) -> usize;
+    /// 切换选中项(指示条动画由各实现自带)。
+    fn select_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>)
+    where
+        Self: Sized;
+}
+
+impl NavSelection for NavigationBarState {
+    fn selected_index(&self) -> usize {
+        self.selected
+    }
+
+    fn select_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.select(index, window, cx)
+    }
+}
+
+impl NavSelection for NavigationRailState {
+    fn selected_index(&self) -> usize {
+        self.selected
+    }
+
+    fn select_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.select(index, window, cx)
+    }
+}
+
+impl NavSelection for NavigationDrawerState {
+    fn selected_index(&self) -> usize {
+        self.selected
+    }
+
+    fn select_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.select(index, window, cx)
+    }
+}
+
 /// 导航项描述。
 #[derive(Clone, Debug)]
 pub struct NavigationItemSpec {
@@ -63,13 +104,14 @@ impl NavigationItemSpec {
 
 /// 导航项内容渲染（Bar / Rail / Drawer 共用）。
 #[allow(clippy::too_many_arguments)]
-fn navigation_item(
+fn navigation_item<T: NavSelection>(
     id: impl Into<ElementId>,
     spec: &NavigationItemSpec,
     selected: bool,
     horizontal: bool,
     indicator_offset: Option<f32>,
     item: &NavigationItemStyle,
+    entity: &Entity<T>,
     on_change: Option<&ChangeHandler>,
     ix: usize,
 ) -> gpui::Stateful<gpui::Div> {
@@ -87,13 +129,15 @@ fn navigation_item(
     let hover = item.hover_opacity;
     let pressed = item.pressed_opacity;
     let indicator_color = item.indicator_color;
+    let click_entity = entity.clone();
+    let on_change = on_change.cloned();
 
-    // 指示条胶囊：仅选中项渲染，在图标 wrapper 内水平居中，
-    // 画在图标层之下（跨项滑动动画见 TabBar 的实现，导航族后续接入）
-    let pill = indicator_offset.map(|_| {
+    // 指示条胶囊：仅选中项渲染，锚定整项宽度的中心（relative 0.5），
+    // 按 (弹簧位置 − 项下标) 的偏移跨项滑动；越出部分由容器裁剪
+    let pill = indicator_offset.map(|offset| {
         div()
             .absolute()
-            .left(relative(0.5))
+            .left(relative(0.5 + offset))
             .ml(-indicator_w / 2.0)
             .top(px(0.))
             .w(indicator_w)
@@ -105,6 +149,7 @@ fn navigation_item(
 
     let base = div()
         .id(id)
+        .relative()
         .flex()
         .flex_col()
         .items_center()
@@ -114,10 +159,12 @@ fn navigation_item(
         .text_color(label_color)
         .hover(move |s| s.bg(icon_color.opacity(hover)))
         .active(move |s| s.bg(icon_color.opacity(pressed)))
-        // 指示条胶囊在下、图标在上
+        // 指示条胶囊在下、图标在上;图标行铺满整项宽度,
+        // 使胶囊的 relative 定位以整项为基准
         .child(
             div()
                 .relative()
+                .w_full()
                 .h(indicator_h)
                 .flex()
                 .items_center()
@@ -127,9 +174,19 @@ fn navigation_item(
                     el.child(Icon::new(icon).size(item.icon_size).color(icon_color))
                 }),
         )
-        .when_some(on_change.cloned(), |el, handler| {
-            el.on_click(move |_, window, cx| handler(ix, window, cx))
+        // 点击:组件内部先完成选中(指示条滑动),
+        // 状态真正变化才触发一次 on_change(未设置回调时仅内部切换)
+        .on_click(move |_, window, cx| {
+            click_entity.update(cx, |state, cx| {
+                let changed = ix != state.selected_index();
+                state.select_index(ix, window, cx);
+                if changed && let Some(handler) = on_change.clone() {
+                    handler(ix, window, cx);
+                }
+            })
         });
+
+    let base = item.label.apply(base);
 
     let base = item.label.apply(base);
     base.child(spec.label.clone())
@@ -252,6 +309,7 @@ impl Render for NavigationBarState {
         let item = NavigationItemStyle::resolve(theme.token_set());
         let indicator_pos = self.indicator.value() as f32;
         let selected = self.selected;
+        let entity = cx.entity();
 
         div()
             .id(self.id.clone())
@@ -259,6 +317,7 @@ impl Render for NavigationBarState {
             .h(bar.height)
             .flex()
             .flex_none()
+            .overflow_hidden()
             .bg(bar.container_color)
             .children(self.items.iter().enumerate().map(|(ix, spec)| {
                 let is_selected = ix == selected;
@@ -275,6 +334,7 @@ impl Render for NavigationBarState {
                     false,
                     offset,
                     &item,
+                    &entity,
                     self.on_change.as_ref(),
                     ix,
                 );
@@ -409,6 +469,7 @@ impl Render for NavigationRailState {
         let _ = self.indicator.value();
         let selected = self.selected;
         let header = self.header.clone();
+        let entity = cx.entity();
 
         div()
             .id(self.id.clone())
@@ -433,6 +494,7 @@ impl Render for NavigationRailState {
                     true,
                     offset,
                     &item,
+                    &entity,
                     self.on_change.as_ref(),
                     ix,
                 )
@@ -540,12 +602,34 @@ impl AnimatedComponent for NavigationDrawerState {
     }
 }
 
+impl NavigationDrawerState {
+    /// 当前选中下标（按条目中的 Item 序号）。
+    pub fn selected(&self) -> usize {
+        self.selected
+    }
+
+    /// 切换选中条目（按 Item 序号；选中高亮即时更新）。
+    pub fn select(&mut self, index: usize, _window: &mut Window, cx: &mut Context<Self>) {
+        let item_count = self
+            .entries
+            .iter()
+            .filter(|entry| matches!(entry, DrawerEntry::Item(_)))
+            .count();
+        if index >= item_count || index == self.selected {
+            return;
+        }
+        self.selected = index;
+        cx.notify();
+    }
+}
+
 impl Render for NavigationDrawerState {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let drawer = NavigationDrawerStyle::resolve(theme.token_set(), self.modal);
         let item = NavigationItemStyle::resolve(theme.token_set());
         let width = drawer.drawer_width(self.modal);
+        let entity = cx.entity();
         let mut item_ix = 0usize;
 
         let mut column = div()
@@ -585,6 +669,7 @@ impl Render for NavigationDrawerState {
                         true,
                         None,
                         &item,
+                        &entity,
                         on_change.as_ref(),
                         ix,
                     )

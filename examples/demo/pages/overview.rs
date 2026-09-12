@@ -1,9 +1,9 @@
 //! Components overview 页：全部页面的导航列表。
 
-use gpui::{App, Entity, IntoElement, Render, Styled, Window, div, prelude::*, px};
+use gpui::{App, Entity, IntoElement, Render, Styled, Window, prelude::*, px};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 use crate::PAGES;
 
 /// Overview 页视图。
@@ -29,14 +29,14 @@ impl Render for OverviewPage {
         let colors = theme.colors().clone();
         let on_navigate = self.on_navigate.clone();
 
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(12.))
-            .child(subsection(
-                cx,
-                "Material Components",
-                md3_gpui::Card::new().outlined().overflow_hidden().child(
+        gallery([showcase_group(
+            cx,
+            "Material Components",
+            [md3_gpui::Card::new()
+                .outlined()
+                .overflow_hidden()
+                .w_full()
+                .child(
                     md3_gpui::List::new().children(PAGES.iter().enumerate().skip(1).map(
                         |(ix, meta)| {
                             let on_navigate = on_navigate.clone();
@@ -55,7 +55,8 @@ impl Render for OverviewPage {
                                 })
                         },
                     )),
-                ),
-            ))
+                )
+                .into_any_element()],
+        )])
     }
 }

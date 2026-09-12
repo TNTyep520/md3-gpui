@@ -260,7 +260,10 @@ impl Render for ChipState {
             base
         } else {
             let base = wire_events(base, &entity, theme.motion(), |s: &mut Self| &mut s.surface);
-            let base = self.surface.overlay(fg, state_layer.pressed).apply(base);
+            let base = self
+                .surface
+                .overlay(fg, state_layer.pressed, shapes.small)
+                .apply(base);
             base.child(self.surface.bounds.capture_element())
         };
 

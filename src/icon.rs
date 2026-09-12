@@ -1,7 +1,7 @@
 //! Icon 元素：以字体字形渲染 Material Symbols 图标。
 //!
 //! 实现方式对齐 [m3fx](https://github.com/Glavo/m3fx) 的 `M3Icon`
-//! （Apache-2.0，© 2026 Glavo）：图标由内嵌的 Material Symbols Outlined
+//! （Apache-2.0，© 2026 Glavo）：图标由内嵌的
 //! 符号字体（见 [`crate::fonts`]）以字形连字（ligature）渲染，
 //! 不再使用 SVG 资源——任意图标无需手动导入，直接写 ligature 名即可。
 //!
@@ -17,12 +17,7 @@ use gpui::{
     App, Hsla, IntoElement, Pixels, RenderOnce, SharedString, Styled, Window, div, prelude::*, px,
 };
 
-/// 图标字体族名（Material Symbols Outlined）。
-///
-/// 库内不内嵌字体（对齐 m3fx）：应用需自行注册该字体
-/// （`text_system().add_fonts` 或系统安装），否则图标以
-/// ligature 文本回退显示。
-pub const ICON_FONT_FAMILY: &str = "Material Symbols Outlined";
+pub use crate::fonts::ICON_FONT_FAMILY;
 
 /// 图标名。
 ///
@@ -93,6 +88,35 @@ impl IconName {
             IconName::Custom(name) => name,
         }
     }
+
+    /// 图标的 PUA 码点（官方 codepoints 表）。
+    ///
+    /// 内置图标全部有码点：渲染直接用码点字符映射字形，
+    /// 不依赖连字（ligature）查找的触发行为。
+    /// [`IconName::Custom`] 无固定码点，返回 `None`（走 ligature 名渲染）。
+    pub fn codepoint(self) -> Option<char> {
+        let cp = match self {
+            IconName::Add => 0xe145,
+            IconName::ArrowBack => 0xe5c4,
+            IconName::Check => 0xe668,
+            IconName::ChevronRight => 0xe5cc,
+            IconName::Close => 0xe5cd,
+            IconName::Delete => 0xe92e,
+            IconName::Edit => 0xf097,
+            IconName::Favorite => 0xe87e,
+            IconName::Home => 0xe9b2,
+            IconName::Info => 0xe88e,
+            IconName::Menu => 0xe5d2,
+            IconName::MoreVert => 0xe5d4,
+            IconName::Person => 0xf0d3,
+            IconName::ProgressActivity => 0xe9d0,
+            IconName::Search => 0xef7a,
+            IconName::Settings => 0xe8b8,
+            IconName::Star => 0xf09a,
+            IconName::Custom(_) => return None,
+        };
+        char::from_u32(cp)
+    }
 }
 
 /// 图标元素（字体字形渲染）
@@ -136,6 +160,8 @@ impl RenderOnce for Icon {
         // 行高锁定为图标尺寸：gpui 会把字体的自然行（ascent+descent，
         // Material Symbols 为 1.2×字号）在行盒内居中放置，实测字形墨心
         // 恰好落在行盒中心，无需额外补偿（实测 ascent 26.4/descent 2.4 @24px）。
+        //
+        // 内置图标经 ligature 名触发字形。
         div()
             .font_family(ICON_FONT_FAMILY)
             .text_size(self.size)

@@ -133,13 +133,11 @@ const PAGES: [PageMeta; 13] = [
 /// demo 根视图。
 struct Demo {
     dark: bool,
-    expressive: bool,
     seed: u32,
     page: PageId,
     dialog_open: bool,
     wired: bool,
     dark_switch: Entity<SwitchState>,
-    profile_switch: Entity<SwitchState>,
     pages: Pages,
 }
 
@@ -147,13 +145,11 @@ impl Demo {
     fn new(cx: &mut Context<Self>) -> Self {
         Self {
             dark: false,
-            expressive: false,
             seed: DEFAULT_SEED,
             page: PageId::Overview,
             dialog_open: false,
             wired: false,
-            dark_switch: Switch::new("theme-switch").show_icon(true).build(cx),
-            profile_switch: Switch::new("profile-switch").build(cx),
+            dark_switch: Switch::new("theme-switch").build(cx),
             pages: Pages::new(cx),
         }
     }
@@ -165,12 +161,7 @@ impl Demo {
         } else {
             ThemeMode::Light
         };
-        let profile = if self.expressive {
-            Profile::Expressive2025
-        } else {
-            Profile::Baseline2021
-        };
-        Theme::set(cx, Theme::from_seed(self.seed, mode, profile));
+        Theme::set(cx, Theme::from_seed(self.seed, mode, Profile::Baseline2021));
         cx.refresh_windows();
     }
 
@@ -186,15 +177,6 @@ impl Demo {
             switch.set_on_change(move |checked, _window, cx| {
                 this.update(cx, |d, cx| {
                     d.dark = checked;
-                    d.apply_theme(cx);
-                })
-            });
-        });
-        let this = cx.entity();
-        self.profile_switch.update(cx, |switch, _| {
-            switch.set_on_change(move |checked, _window, cx| {
-                this.update(cx, |d, cx| {
-                    d.expressive = checked;
                     d.apply_theme(cx);
                 })
             });
@@ -401,18 +383,6 @@ impl Render for Demo {
                     .flex_none()
                     .items_center()
                     .gap(px(12.))
-                    .child(
-                        typography
-                            .label_large
-                            .apply(div())
-                            .text_color(colors.on_surface_variant)
-                            .child(if self.expressive {
-                                "Expressive"
-                            } else {
-                                "Baseline"
-                            }),
-                    )
-                    .child(self.profile_switch.clone())
                     .child(
                         typography
                             .label_large

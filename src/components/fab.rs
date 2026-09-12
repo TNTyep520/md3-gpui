@@ -213,7 +213,10 @@ impl Render for FabState {
         let entity = cx.entity();
         let base = {
             let base = wire_events(base, &entity, theme.motion(), |s: &mut Self| &mut s.surface);
-            let base = self.surface.overlay(fg, state_layer.pressed).apply(base);
+            let base = self
+                .surface
+                .overlay(fg, state_layer.pressed, radius)
+                .apply(base);
             base.child(self.surface.bounds.capture_element())
         };
 

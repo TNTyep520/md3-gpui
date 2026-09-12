@@ -17,7 +17,7 @@ pub mod slider_progress;
 pub mod tabs;
 pub mod text_fields;
 
-use gpui::{App, Entity, IntoElement, Styled, div, prelude::*, px};
+use gpui::{AnyElement, App, Entity, FontWeight, IntoElement, Styled, div, prelude::*, px};
 
 // 页面间回调类型（页 → 根）。
 pub type PageCallback<A> = std::rc::Rc<dyn Fn(A, &mut App)>;
@@ -63,26 +63,43 @@ impl Pages {
     }
 }
 
-/// 内容区小节标题。
-pub(crate) fn subsection(
+/// m3fx 风格演示画廊:展示组垂直排列,组间距 18(对齐 m3fx `createGallery`)。
+pub(crate) fn gallery(groups: impl IntoIterator<Item = AnyElement>) -> impl IntoElement {
+    div().flex().flex_col().gap(px(18.)).children(groups)
+}
+
+/// m3fx 风格展示组:粗体 14px 标题 + 圆角卡片(surface-container-low
+/// 背景、12px 圆角、18px 内边距),内容以 16px 间距流式排布
+/// (对齐 m3fx `createShowcaseGroup` 与 m3fx-demo.css)。
+pub(crate) fn showcase_group(
     cx: &App,
     title: &'static str,
-    content: impl IntoElement,
-) -> impl IntoElement {
+    items: impl IntoIterator<Item = AnyElement>,
+) -> AnyElement {
     let theme = cx.theme();
     div()
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap(px(10.))
         .child(
-            theme
-                .typography()
-                .title_medium
-                .apply(div())
-                .text_color(theme.colors().primary)
+            div()
+                .text_size(px(14.))
+                .font_weight(FontWeight::BOLD)
+                .text_color(theme.colors().on_surface)
                 .child(title),
         )
-        .child(content)
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(px(16.))
+                .p(px(18.))
+                .rounded(px(12.))
+                .bg(theme.colors().surface_container_low)
+                .children(items),
+        )
+        .into_any_element()
 }
 
 /// 演示卡片。

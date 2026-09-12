@@ -1,9 +1,9 @@
 //! Dialogs 页：打开按钮在本页，对话框本体由根视图渲染（浮层需在根层）。
 
-use gpui::{App, Entity, IntoElement, Render, Window, div, prelude::*};
+use gpui::{App, Entity, IntoElement, Render, Window, prelude::*};
 use md3_gpui::prelude::*;
 
-use super::subsection;
+use super::{gallery, showcase_group};
 
 /// Dialogs 页视图。
 pub struct DialogsPage {
@@ -36,6 +36,10 @@ impl DialogsPage {
 
 impl Render for DialogsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        subsection(cx, "Dialogs", div().child(self.b_dialog.clone()))
+        gallery([showcase_group(
+            cx,
+            "Dialog Launchers",
+            [self.b_dialog.clone().into_any_element()],
+        )])
     }
 }

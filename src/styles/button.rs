@@ -161,7 +161,8 @@ impl ButtonStyle {
             },
             outline_color: outline.map(|c| {
                 if disabled {
-                    colors.on_surface.opacity(state.disabled_content)
+                    // Compose M3：禁用描边 = outline @ 12%
+                    colors.outline.opacity(state.disabled_container)
                 } else {
                     c
                 }
