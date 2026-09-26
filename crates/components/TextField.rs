@@ -260,10 +260,10 @@ impl Render for TextFieldState {
         let theme = cx.theme();
         let colors = theme.colors();
         let tokens = theme.component().text_field;
-        let state_layer = *theme.state_layer();
         let p = self.focus_progress.value() as f32;
 
         let has_error = self.error.is_some();
+        let style = TextFieldStyle::resolve(theme.token_set(), has_error, self.disabled);
         let accent = if has_error {
             colors.error
         } else {
@@ -271,26 +271,24 @@ impl Render for TextFieldState {
         };
 
         // 边框：未聚焦 1dp outline；聚焦时叠加 2dp accent 描边（透明度随进度）
-        let border_color = if self.disabled {
-            colors.disabled_container(&state_layer)
-        } else if has_error {
-            lerp_color(colors.outline, colors.error, p)
+        let border_color = if self.disabled || has_error {
+            style.border_color
         } else {
-            lerp_color(colors.outline, accent, p)
+            lerp_color(style.border_color, accent, p)
         };
 
         // 浮动标签：聚焦或非空时缩小上浮
         let floating = p > 0.5 || !self.value.is_empty();
-        let label_color = if focused && !has_error {
-            accent
+        let label_color = if focused {
+            style.focused_label_color
         } else {
-            colors.on_surface_variant
+            style.label_color
         };
         let label_style = theme.typography();
-        let gap = px(tokens.supporting_gap);
+        let gap = style.supporting_gap;
 
-        let icon_size = px(tokens.icon_size);
-        let min_h = px(tokens.min_height);
+        let icon_size = style.icon_size;
+        let min_h = style.min_height;
 
         let entity = cx.entity();
         let key_entity = entity;
@@ -306,17 +304,14 @@ impl Render for TextFieldState {
             .rounded(theme.shapes().extra_small)
             .border_1()
             .border_color(border_color)
-            .bg(colors.surface)
-            .when(self.disabled, |el| {
-                el.bg(colors
-                    .on_surface
-                    .opacity(state_layer.disabled_container / 6.0))
-            })
+            .bg(style.container_color)
             .when(!self.disabled, |el| el.cursor_text())
             // 点击聚焦
-            .on_mouse_down(gpui::MouseButton::Left, {
-                let focus = self.focus.clone();
-                move |_event, window, _cx| window.focus(&focus)
+            .when(!self.disabled, |element| {
+                element.on_mouse_down(gpui::MouseButton::Left, {
+                    let focus = self.focus.clone();
+                    move |_event, window, _cx| window.focus(&focus)
+                })
             })
             // 键盘录入
             .on_key_down(move |event, window, cx| {
@@ -352,11 +347,7 @@ impl Render for TextFieldState {
             .py(px(tokens.top_padding));
         let row = row
             .when_some(self.leading_icon, |el, icon| {
-                el.child(
-                    Icon::new(icon)
-                        .size(icon_size)
-                        .color(colors.on_surface_variant),
-                )
+                el.child(Icon::new(icon).size(icon_size).color(style.icon_color))
             })
             .child(
                 // 文本区（占位 + 文本 + 光标）
@@ -372,7 +363,7 @@ impl Render for TextFieldState {
                         div()
                             .text_size(label_style.body_large.size)
                             .line_height(label_style.body_large.line_height)
-                            .text_color(colors.on_surface)
+                            .text_color(style.text_color)
                             .child(SharedString::from(self.value.clone())),
                     )
                     .when(self.value.is_empty() && !floating, |el| {
@@ -381,7 +372,7 @@ impl Render for TextFieldState {
                                 .absolute()
                                 .left_0()
                                 .text_size(label_style.body_large.size)
-                                .text_color(colors.on_surface_variant.opacity(0.7))
+                                .text_color(style.placeholder_color)
                                 .child(self.label.clone()),
                         )
                     })
@@ -488,6 +479,9 @@ impl TextFieldState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if self.disabled {
+            return false;
+        }
         match (keystroke.key.as_str(), keystroke.key_char.clone()) {
             ("enter", _) => {
                 if let Some(handler) = self.on_submit.clone() {
@@ -539,6 +533,116 @@ impl TextFieldState {
                 false
             }
             _ => false,
+        }
+    }
+}
+
+pub use appearance::TextFieldStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 文本框样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct TextFieldStyle {
+        /// 容器背景色。
+        pub container_color: Hsla,
+        /// 未聚焦描边色。
+        pub border_color: Hsla,
+        /// 聚焦/error 强调色。
+        pub accent: Hsla,
+        /// 浮动标签色（未聚焦）。
+        pub label_color: Hsla,
+        /// 浮动标签色（聚焦）。
+        pub focused_label_color: Hsla,
+        /// 输入文字色。
+        pub text_color: Hsla,
+        /// 占位文字色。
+        pub placeholder_color: Hsla,
+        /// helper 文本色。
+        pub helper_color: Hsla,
+        /// error 文本色。
+        pub error_color: Hsla,
+        /// 前导图标色。
+        pub icon_color: Hsla,
+        /// 禁用容器色。
+        pub disabled_container_color: Hsla,
+        /// 最小高度。
+        pub min_height: Pixels,
+        /// 圆角。
+        pub corner_radius: Pixels,
+        /// 水平内边距。
+        pub horizontal_padding: Pixels,
+        /// 垂直内边距。
+        pub vertical_padding: Pixels,
+        /// helper/error 文本与输入区间距。
+        pub supporting_gap: Pixels,
+        /// 图标尺寸。
+        pub icon_size: Pixels,
+        /// 输入文字字型。
+        pub text: crate::theme::TypeStyle,
+        /// 浮动标签字型。
+        pub floating_label: crate::theme::TypeStyle,
+        /// 支撑文本字型。
+        pub supporting_text: crate::theme::TypeStyle,
+    }
+    impl TextFieldStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, error: bool, disabled: bool) -> Self {
+            let colors = &tokens.colors;
+            let state = &tokens.state_layer;
+            let field = &tokens.component.text_field;
+            let accent = if error { colors.error } else { colors.primary };
+            Self {
+                container_color: if disabled {
+                    colors.on_surface.opacity(state.disabled_container / 6.0)
+                } else {
+                    colors.surface
+                },
+                border_color: if disabled {
+                    colors.disabled_container(state)
+                } else if error {
+                    colors.error
+                } else {
+                    colors.outline
+                },
+                accent,
+                label_color: if disabled {
+                    colors.disabled_content(state)
+                } else if error {
+                    colors.error
+                } else {
+                    colors.on_surface_variant
+                },
+                focused_label_color: if error { colors.error } else { colors.primary },
+                text_color: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.on_surface
+                },
+                placeholder_color: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.on_surface_variant
+                },
+                helper_color: colors.on_surface_variant,
+                error_color: colors.error,
+                icon_color: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.on_surface_variant
+                },
+                disabled_container_color: colors.on_surface.opacity(state.disabled_container / 6.0),
+                min_height: px(field.min_height),
+                corner_radius: tokens.shapes.extra_small,
+                horizontal_padding: px(field.horizontal_padding),
+                vertical_padding: px(field.top_padding),
+                supporting_gap: px(field.supporting_gap),
+                icon_size: px(field.icon_size),
+                text: tokens.typography.body_large,
+                floating_label: tokens.typography.label_small,
+                supporting_text: tokens.typography.body_small,
+            }
         }
     }
 }

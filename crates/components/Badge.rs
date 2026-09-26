@@ -8,11 +8,38 @@
 //! ```
 
 use gpui::{
-    AnyElement, App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled,
-    Window, div, prelude::*, px,
+    AnyElement, App, ElementId, Hsla, IntoElement, ParentElement as _, Pixels, RenderOnce,
+    SharedString, Styled, Window, div, prelude::*, px,
 };
 
 use crate::prelude::ActiveTheme;
+use crate::theme::{TokenSet, TypeStyle};
+use crate::tokens::BadgeTokens;
+
+#[derive(Clone, Copy, Debug)]
+pub struct BadgeStyle {
+    pub container_color: Hsla,
+    pub content_color: Hsla,
+    pub size: Pixels,
+    pub horizontal_padding: Pixels,
+    pub label: TypeStyle,
+}
+
+impl BadgeStyle {
+    pub fn resolve(tokens: &TokenSet, has_label: bool) -> Self {
+        Self {
+            container_color: BadgeTokens::COLOR.resolve(tokens),
+            content_color: BadgeTokens::LARGE_LABEL_TEXT_COLOR.resolve(tokens),
+            size: if has_label {
+                BadgeTokens::LARGE_SIZE.pixels()
+            } else {
+                BadgeTokens::SIZE.pixels()
+            },
+            horizontal_padding: px(4.),
+            label: BadgeTokens::LARGE_LABEL_TEXT_FONT.resolve(tokens),
+        }
+    }
+}
 
 /// MD3 徽标：未设置 label 时渲染为圆点，否则渲染为带文字的胶囊。
 #[derive(IntoElement)]
@@ -39,27 +66,28 @@ impl Badge {
 impl RenderOnce for Badge {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let colors = theme.colors();
+        let style = BadgeStyle::resolve(theme.token_set(), self.label.is_some());
 
         match self.label {
-            Some(label) => div()
+            Some(label) => style
+                .label
+                .apply(div())
                 .id(self.id)
-                .min_w(px(16.))
-                .h(px(16.))
-                .px(px(4.))
+                .min_w(style.size)
+                .h(style.size)
+                .px(style.horizontal_padding)
                 .flex()
                 .items_center()
                 .justify_center()
                 .rounded_full()
-                .bg(colors.error)
-                .text_color(colors.on_error)
-                .text_size(px(12.))
+                .bg(style.container_color)
+                .text_color(style.content_color)
                 .child(label),
             None => div()
                 .id(self.id)
-                .size(px(6.))
+                .size(style.size)
                 .rounded_full()
-                .bg(colors.error),
+                .bg(style.container_color),
         }
     }
 }

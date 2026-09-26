@@ -20,13 +20,13 @@ use std::time::Instant;
 use gpui::{
     App, AppContext as _, ClickEvent, Context, ElementId, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled,
-    Window, div, prelude::FluentBuilder as _, px,
+    Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::icon::{Icon, IconName};
 use crate::interaction::InteractiveSurface;
 use crate::motion::{AnimatedComponent, AnimationDriver};
-use crate::theme::{ActiveTheme, Elevation};
+use crate::theme::ActiveTheme;
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
@@ -158,36 +158,23 @@ impl Render for FabState {
         }
 
         let theme = cx.theme();
-        let colors = theme.colors();
-        let shapes = *theme.shapes();
         let state_layer = *theme.state_layer();
-
-        let (bg, fg) = match self.color {
-            FabColor::Surface => (colors.surface_container_high, colors.primary),
-            FabColor::Primary => (colors.primary_container, colors.on_primary_container),
-            FabColor::Secondary => (colors.secondary_container, colors.on_secondary_container),
-            FabColor::Tertiary => (colors.tertiary_container, colors.on_tertiary_container),
-        };
-
         let extended = self.label.is_some();
-        let (container, radius, icon_size) = if extended {
-            (px(56.), shapes.large, px(24.))
-        } else {
-            match self.size {
-                FabSize::Small => (px(40.), shapes.medium, px(24.)),
-                FabSize::Standard => (px(56.), shapes.large, px(24.)),
-                FabSize::Large => (px(96.), shapes.extra_large, px(36.)),
-            }
-        };
-
-        let elevation = if self.lowered {
-            Elevation::Level1
-        } else {
-            Elevation::Level3
-        };
-
-        let label_style = theme.typography().label_large;
-        let shadow_color = colors.shadow;
+        let style = FabStyle::resolve(
+            theme.token_set(),
+            if extended {
+                FabSize::Standard
+            } else {
+                self.size
+            },
+            self.color,
+            self.lowered,
+        );
+        let (bg, fg) = (style.container_color, style.content_color);
+        let (container, radius, icon_size) = (style.size, style.corner_radius, style.icon_size);
+        let elevation = style.elevation;
+        let label_style = style.label;
+        let shadow_color = style.shadow_color;
 
         let base = div()
             .id(self.id.clone())
@@ -196,7 +183,7 @@ impl Render for FabState {
             .flex_none()
             .items_center()
             .justify_center()
-            .gap(px(8.))
+            .gap(style.icon_gap)
             .rounded(radius)
             .bg(bg)
             .text_color(fg)
@@ -205,7 +192,10 @@ impl Render for FabState {
             .overflow_hidden();
 
         let base = if extended {
-            label_style.apply(base.pl(px(16.)).pr(px(20.)))
+            label_style.apply(
+                base.pl(style.extended_padding.0)
+                    .pr(style.extended_padding.1),
+            )
         } else {
             base.w(container)
         };
@@ -232,5 +222,81 @@ impl Render for FabState {
 
         base.child(Icon::new(self.icon).size(icon_size))
             .when_some(self.label.clone(), |el, label| el.child(label))
+    }
+}
+
+pub use appearance::FabStyle;
+
+mod appearance {
+    use super::FabColor;
+    use super::FabSize;
+    use crate::theme::{Elevation, TokenSet};
+    use gpui::{Pixels, px};
+    /// MD3 FAB 样式。
+    #[derive(Clone, Debug)]
+    pub struct FabStyle {
+        /// 容器色。
+        pub container_color: gpui::Hsla,
+        /// 内容色。
+        pub content_color: gpui::Hsla,
+        /// 容器边长（extended 时为高度）。
+        pub size: Pixels,
+        /// 圆角。
+        pub corner_radius: Pixels,
+        /// 图标尺寸。
+        pub icon_size: Pixels,
+        /// 图标与文字间距。
+        pub icon_gap: Pixels,
+        /// 阴影等级。
+        pub elevation: Elevation,
+        /// 阴影颜色。
+        pub shadow_color: gpui::Hsla,
+        /// 状态层/涟漪基色。
+        pub state_layer_color: gpui::Hsla,
+        /// 按压档状态层不透明度。
+        pub state_layer_opacity: f32,
+        /// extended（带文字）时的水平内边距。
+        pub extended_padding: (Pixels, Pixels),
+        /// 文字字型。
+        pub label: crate::theme::TypeStyle,
+    }
+    impl FabStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, size: FabSize, color: FabColor, lowered: bool) -> Self {
+            let colors = &tokens.colors;
+            let shapes = tokens.shapes;
+            let state = &tokens.state_layer;
+
+            let (container, content) = match color {
+                FabColor::Surface => (colors.surface_container_high, colors.primary),
+                FabColor::Primary => (colors.primary_container, colors.on_primary_container),
+                FabColor::Secondary => (colors.secondary_container, colors.on_secondary_container),
+                FabColor::Tertiary => (colors.tertiary_container, colors.on_tertiary_container),
+            };
+            let (size, radius, icon) = match size {
+                FabSize::Small => (px(40.), shapes.medium, px(24.)),
+                FabSize::Standard => (px(56.), shapes.large, px(24.)),
+                FabSize::Large => (px(96.), shapes.extra_large, px(36.)),
+            };
+
+            Self {
+                container_color: container,
+                content_color: content,
+                size,
+                corner_radius: radius,
+                icon_size: icon,
+                icon_gap: px(8.),
+                elevation: if lowered {
+                    Elevation::Level1
+                } else {
+                    Elevation::Level3
+                },
+                shadow_color: colors.shadow,
+                state_layer_color: content,
+                state_layer_opacity: state.pressed,
+                extended_padding: (px(16.), px(20.)),
+                label: tokens.typography.label_large,
+            }
+        }
     }
 }

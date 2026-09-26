@@ -8,7 +8,7 @@ use gpui::{
     div,
 };
 
-use crate::theme::{ActiveTheme, Elevation};
+use crate::theme::ActiveTheme;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CardVariant {
@@ -74,24 +74,74 @@ impl ParentElement for Card {
 impl RenderOnce for Card {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let colors = theme.colors();
-
+        let style = CardStyle::resolve(theme.token_set(), self.variant);
         let base = self
             .base
-            .rounded(theme.shapes().medium)
-            .text_color(colors.on_surface);
-
-        let base = match self.variant {
-            CardVariant::Elevated => base
-                .bg(colors.surface_container_low)
-                .shadow(Elevation::Level1.shadows(colors.shadow)),
-            CardVariant::Filled => base.bg(colors.surface_container_highest),
-            CardVariant::Outlined => base
-                .bg(colors.surface)
-                .border_1()
-                .border_color(colors.outline_variant),
+            .rounded(style.corner_radius)
+            .text_color(style.content_color)
+            .bg(style.container_color)
+            .shadow(style.elevation.shadows(style.shadow_color));
+        let base = if let Some(outline) = style.outline_color {
+            base.border_1().border_color(outline)
+        } else {
+            base
         };
 
         base.children(self.children)
+    }
+}
+
+pub use appearance::CardStyle;
+
+mod appearance {
+    use super::CardVariant;
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels};
+    /// MD3 卡片样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct CardStyle {
+        /// 容器色。
+        pub container_color: Hsla,
+        /// 内容色。
+        pub content_color: Hsla,
+        /// 描边色（`Some` 启用 1dp 描边）。
+        pub outline_color: Option<Hsla>,
+        /// 圆角。
+        pub corner_radius: Pixels,
+        /// 阴影颜色。
+        pub shadow_color: Hsla,
+        /// 阴影等级。
+        pub elevation: crate::theme::Elevation,
+    }
+    impl CardStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, variant: CardVariant) -> Self {
+            let colors = &tokens.colors;
+            let (container, outline, elevation) = match variant {
+                CardVariant::Elevated => (
+                    colors.surface_container_low,
+                    None,
+                    crate::theme::Elevation::Level1,
+                ),
+                CardVariant::Filled => (
+                    colors.surface_container_highest,
+                    None,
+                    crate::theme::Elevation::Level0,
+                ),
+                CardVariant::Outlined => (
+                    colors.surface,
+                    Some(colors.outline_variant),
+                    crate::theme::Elevation::Level0,
+                ),
+            };
+            Self {
+                container_color: container,
+                content_color: colors.on_surface,
+                outline_color: outline,
+                corner_radius: tokens.shapes.medium,
+                shadow_color: colors.shadow,
+                elevation,
+            }
+        }
     }
 }

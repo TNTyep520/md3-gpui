@@ -191,34 +191,20 @@ impl Render for ChipState {
         }
 
         let theme = cx.theme();
-        let colors = theme.colors();
-        let shapes = *theme.shapes();
         let state_layer = *theme.state_layer();
         let disabled = self.disabled;
-        let selected = self.selected;
-
-        let fg = if disabled {
-            colors.disabled_content(&state_layer)
-        } else if selected {
-            colors.on_secondary_container
-        } else {
-            colors.on_surface
-        };
-        let icon_color = if disabled {
-            fg
-        } else if selected {
-            colors.on_secondary_container
-        } else {
-            colors.primary
-        };
-
-        let bg = if selected {
-            Some(colors.secondary_container)
-        } else if self.elevated {
-            Some(colors.surface_container_low)
-        } else {
-            None
-        };
+        let selected =
+            self.selected && matches!(self.variant, ChipVariant::Filter | ChipVariant::Input);
+        let style = ChipStyle::resolve(
+            theme.token_set(),
+            self.variant,
+            selected,
+            self.elevated,
+            disabled,
+        );
+        let fg = style.content_color;
+        let icon_color = style.icon_color;
+        let bg = style.container_color;
 
         // Filter chip 选中时自动带勾图标
         let leading = if self.variant == ChipVariant::Filter && selected {
@@ -229,30 +215,34 @@ impl Render for ChipState {
 
         let has_leading = leading.is_some();
         let has_trailing = self.on_remove.is_some();
-        let label_style = theme.typography().label_large;
-        let outline_color = if disabled {
-            colors.disabled_content(&state_layer)
-        } else {
-            colors.outline_variant
-        };
-        let show_outline = bg.is_none() && !self.elevated;
+        let label_style = style.label;
 
         let base = div()
             .id(self.id.clone())
-            .h(px(32.))
+            .h(style.height)
             .flex()
             .flex_none()
             .items_center()
-            .gap(px(8.))
-            .rounded(shapes.small)
-            .pl(if has_leading { px(8.) } else { px(16.) })
-            .pr(if has_trailing { px(8.) } else { px(16.) })
+            .gap(style.gap)
+            .rounded(style.corner_radius)
+            .pl(if has_leading {
+                style.edge_padding
+            } else {
+                style.center_padding
+            })
+            .pr(if has_trailing {
+                style.edge_padding
+            } else {
+                style.center_padding
+            })
             .text_color(fg);
         let base = label_style.apply(base);
 
         let base = base
             .when_some(bg, |el, bg_color| el.bg(bg_color))
-            .when(show_outline, |el| el.border_1().border_color(outline_color))
+            .when_some(style.outline_color, |el, color| {
+                el.border_1().border_color(color)
+            })
             .when(!disabled, |el| el.cursor_pointer().overflow_hidden());
 
         let entity = cx.entity();
@@ -267,7 +257,7 @@ impl Render for ChipState {
                 |s: &mut Self| &mut s.surface,
                 fg,
                 state_layer.pressed,
-                shapes.small,
+                style.corner_radius,
             )
         };
 
@@ -281,7 +271,7 @@ impl Render for ChipState {
 
         let base = base
             .when_some(leading, |el, icon| {
-                el.child(Icon::new(icon).size(px(18.)).color(icon_color))
+                el.child(Icon::new(icon).size(style.icon_size).color(icon_color))
             })
             .child(self.label.clone());
 
@@ -304,9 +294,117 @@ impl Render for ChipState {
                             cx.stop_propagation();
                             handler(event, window, cx)
                         })
-                        .child(Icon::new(IconName::Close).size(px(16.)).color(fg)),
+                        .child(Icon::new(IconName::Close).size(style.close_size).color(fg)),
                 )
             },
         )
+    }
+}
+
+pub use appearance::ChipStyle;
+
+mod appearance {
+    use super::ChipVariant;
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 纸片样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct ChipStyle {
+        /// 容器色（`None` 为透明）。
+        pub container_color: Option<Hsla>,
+        /// 内容色。
+        pub content_color: Hsla,
+        /// 前导图标色。
+        pub icon_color: Hsla,
+        /// 描边色（`Some` 启用 1dp 描边）。
+        pub outline_color: Option<Hsla>,
+        /// 高度。
+        pub height: Pixels,
+        /// 圆角。
+        pub corner_radius: Pixels,
+        /// 带前导/尾随元素一侧的水平内边距。
+        pub edge_padding: Pixels,
+        /// 无前导/尾随元素一侧的水平内边距。
+        pub center_padding: Pixels,
+        /// 元素间距。
+        pub gap: Pixels,
+        /// 前导图标尺寸。
+        pub icon_size: Pixels,
+        /// 移除按钮尺寸。
+        pub close_size: Pixels,
+        /// 状态层基色。
+        pub state_layer_color: Hsla,
+        /// 按压档状态层不透明度。
+        pub state_layer_opacity: f32,
+        /// 文字字型。
+        pub label: crate::theme::TypeStyle,
+    }
+    impl ChipStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(
+            tokens: &TokenSet,
+            variant: ChipVariant,
+            selected: bool,
+            elevated: bool,
+            disabled: bool,
+        ) -> Self {
+            let colors = &tokens.colors;
+            let state = &tokens.state_layer;
+            let selected = selected && matches!(variant, ChipVariant::Filter | ChipVariant::Input);
+            let (container, content, icon) = if disabled {
+                (
+                    (selected || elevated).then(|| colors.disabled_container(state)),
+                    colors.disabled_content(state),
+                    colors.disabled_content(state),
+                )
+            } else if selected {
+                (
+                    Some(colors.secondary_container),
+                    colors.on_secondary_container,
+                    colors.on_secondary_container,
+                )
+            } else if elevated {
+                (
+                    Some(colors.surface_container_low),
+                    colors.on_surface,
+                    colors.primary,
+                )
+            } else {
+                (
+                    None,
+                    colors.on_surface_variant,
+                    if variant == ChipVariant::Input {
+                        colors.on_surface_variant
+                    } else {
+                        colors.primary
+                    },
+                )
+            };
+
+            Self {
+                container_color: container,
+                content_color: content,
+                icon_color: icon,
+                outline_color: if container.is_none() && !elevated {
+                    Some(if disabled {
+                        colors.on_surface.opacity(state.disabled_container)
+                    } else {
+                        colors.outline_variant
+                    })
+                } else {
+                    None
+                },
+                height: px(32.),
+                corner_radius: tokens.shapes.small,
+                edge_padding: px(8.),
+                center_padding: px(16.),
+                gap: px(8.),
+                icon_size: px(18.),
+                close_size: px(16.),
+                state_layer_color: content,
+                state_layer_opacity: state.pressed,
+                label: tokens.typography.label_large,
+            }
+        }
     }
 }

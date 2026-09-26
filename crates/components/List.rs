@@ -137,12 +137,17 @@ impl RenderOnce for ListItem {
         let colors = theme.colors();
         let disabled = self.disabled;
         let two_line = self.supporting_text.is_some();
-        let height = if two_line { px(72.) } else { px(56.) };
+        let style = ListItemStyle::resolve(theme.token_set());
+        let height = if two_line {
+            style.height_two_line
+        } else {
+            style.height_single_line
+        };
         let layer = colors.on_surface;
 
-        let headline_style = theme.typography().body_large;
-        let supporting_style = theme.typography().body_medium;
-        let trailing_style = theme.typography().label_small;
+        let headline_style = style.headline;
+        let supporting_style = style.supporting;
+        let trailing_style = style.trailing;
 
         div()
             .id(self.id)
@@ -151,8 +156,9 @@ impl RenderOnce for ListItem {
             .flex()
             .flex_none()
             .items_center()
-            .gap(px(16.))
-            .px(px(16.))
+            .gap(style.gap)
+            .px(style.horizontal_padding)
+            .py(style.vertical_padding)
             .when(!disabled && self.on_click.is_some(), |el| {
                 el.cursor_pointer()
                     .hover(move |s| s.bg(layer.opacity(HOVER_OPACITY)))
@@ -212,5 +218,63 @@ impl RenderOnce for ListItem {
                 )
             })
             .when_some(self.trailing, |el, trailing| el.child(trailing))
+    }
+}
+
+pub use appearance::ListItemStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 列表项样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct ListItemStyle {
+        /// 单行高度。
+        pub height_single_line: Pixels,
+        /// 双行高度。
+        pub height_two_line: Pixels,
+        /// 内容色。
+        pub content_color: Hsla,
+        /// 支撑文本色。
+        pub supporting_color: Hsla,
+        /// 尾随元素色。
+        pub trailing_color: Hsla,
+        /// 水平内边距。
+        pub horizontal_padding: Pixels,
+        /// 垂直内边距。
+        pub vertical_padding: Pixels,
+        /// 元素间距。
+        pub gap: Pixels,
+        /// 图标尺寸。
+        pub icon_size: Pixels,
+        /// hover 状态层不透明度。
+        pub hover_opacity: f32,
+        /// 标题字型。
+        pub headline: crate::theme::TypeStyle,
+        /// 支撑文本字型。
+        pub supporting: crate::theme::TypeStyle,
+        /// 尾随字型。
+        pub trailing: crate::theme::TypeStyle,
+    }
+    impl ListItemStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet) -> Self {
+            let colors = &tokens.colors;
+            Self {
+                height_single_line: px(56.),
+                height_two_line: px(72.),
+                content_color: colors.on_surface,
+                supporting_color: colors.on_surface_variant,
+                trailing_color: colors.on_surface_variant,
+                horizontal_padding: px(16.),
+                vertical_padding: px(8.),
+                gap: px(16.),
+                icon_size: px(24.),
+                hover_opacity: crate::theme::HOVER_OPACITY,
+                headline: tokens.typography.body_large,
+                supporting: tokens.typography.body_medium,
+                trailing: tokens.typography.label_small,
+            }
+        }
     }
 }

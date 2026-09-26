@@ -115,6 +115,7 @@ impl SelectionPage {
 fn switch_row(label: &'static str, sw: Entity<SwitchState>, label_color: Hsla) -> AnyElement {
     div()
         .flex()
+        .flex_none()
         .items_center()
         .gap(px(8.))
         .child(

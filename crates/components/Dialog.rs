@@ -23,7 +23,7 @@ use gpui::{
 use std::rc::Rc;
 
 use crate::icon::{Icon, IconName};
-use crate::theme::{ActiveTheme, Elevation};
+use crate::theme::ActiveTheme;
 
 type DismissHandler = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 
@@ -83,33 +83,33 @@ impl gpui::ParentElement for Dialog {
 impl RenderOnce for Dialog {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let colors = theme.colors();
+        let style = DialogStyle::resolve(theme.token_set());
         let viewport = window.viewport_size();
 
-        let title_style = theme.typography().headline_small;
-        let body_style = theme.typography().body_medium;
+        let title_style = style.title;
+        let body_style = style.body;
 
         let container = div()
             .id(self.id.clone())
             .occlude()
             // 阻止容器内点击冒泡到 scrim 触发关闭
             .on_click(|_, _, cx| cx.stop_propagation())
-            .min_w(px(280.))
-            .max_w(px(560.))
+            .min_w(style.width_range.0)
+            .max_w(style.width_range.1)
             .max_h(viewport.height - px(96.))
             .flex()
             .flex_col()
-            .rounded(theme.shapes().extra_large)
-            .bg(colors.surface_container_high)
-            .shadow(Elevation::Level3.shadows(colors.shadow))
-            .p(px(24.))
-            .gap(px(16.))
+            .rounded(style.corner_radius)
+            .bg(style.container_color)
+            .shadow(style.elevation.shadows(style.shadow_color))
+            .p(style.padding)
+            .gap(style.gap)
             .when_some(self.icon, |el, icon| {
                 el.child(
                     div()
                         .flex()
                         .justify_center()
-                        .child(Icon::new(icon).size(px(24.)).color(colors.secondary)),
+                        .child(Icon::new(icon).size(px(24.)).color(style.icon_color)),
                 )
             })
             .when_some(self.title, |el, title| {
@@ -117,7 +117,7 @@ impl RenderOnce for Dialog {
                 el.child(
                     title_style
                         .apply(div())
-                        .text_color(colors.on_surface)
+                        .text_color(style.content_color)
                         .when(centered, |t| t.text_center())
                         .child(title),
                 )
@@ -129,7 +129,7 @@ impl RenderOnce for Dialog {
                     .flex_col()
                     .gap(px(8.))
                     .overflow_hidden()
-                    .text_color(colors.on_surface_variant)
+                    .text_color(style.supporting_color)
                     .children(self.children),
             )
             .when(!self.actions.is_empty(), |el| {
@@ -152,12 +152,73 @@ impl RenderOnce for Dialog {
             .flex()
             .items_center()
             .justify_center()
-            .bg(colors.scrim.opacity(0.32))
+            .bg(style.scrim_color.opacity(style.scrim_opacity))
             .when_some(self.on_dismiss, |el, handler| {
                 el.on_click(move |_, window, cx| handler(window, cx))
             })
             .child(container);
 
         deferred(anchored().position(point(px(0.), px(0.))).child(scrim)).with_priority(100)
+    }
+}
+
+pub use appearance::DialogStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 对话框样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct DialogStyle {
+        /// 容器色。
+        pub container_color: Hsla,
+        /// 内容色。
+        pub content_color: Hsla,
+        /// 辅助文本色。
+        pub supporting_color: Hsla,
+        /// 图标色。
+        pub icon_color: Hsla,
+        /// scrim 颜色。
+        pub scrim_color: Hsla,
+        /// scrim 不透明度。
+        pub scrim_opacity: f32,
+        /// 圆角。
+        pub corner_radius: Pixels,
+        /// 最小/最大宽度。
+        pub width_range: (Pixels, Pixels),
+        /// 内边距。
+        pub padding: Pixels,
+        /// 元素间距。
+        pub gap: Pixels,
+        /// 阴影颜色。
+        pub shadow_color: Hsla,
+        /// 阴影等级。
+        pub elevation: crate::theme::Elevation,
+        /// 标题字型。
+        pub title: crate::theme::TypeStyle,
+        /// 正文字型。
+        pub body: crate::theme::TypeStyle,
+    }
+    impl DialogStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet) -> Self {
+            let colors = &tokens.colors;
+            Self {
+                container_color: colors.surface_container_high,
+                content_color: colors.on_surface,
+                supporting_color: colors.on_surface_variant,
+                icon_color: colors.secondary,
+                scrim_color: colors.scrim,
+                scrim_opacity: 0.32,
+                corner_radius: tokens.shapes.extra_large,
+                width_range: (px(280.), px(560.)),
+                padding: px(24.),
+                gap: px(16.),
+                shadow_color: colors.shadow,
+                elevation: crate::theme::Elevation::Level3,
+                title: tokens.typography.headline_small,
+                body: tokens.typography.body_medium,
+            }
+        }
     }
 }

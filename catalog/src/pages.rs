@@ -6,8 +6,10 @@
 // 页面文件按 `Page_<Name>` 命名(多词用驼峰式),非 snake_case
 #![allow(non_snake_case)]
 
+pub mod Page_Additional;
 pub mod Page_AppBars;
 pub mod Page_Buttons;
+pub mod Page_ButtonsExtended;
 pub mod Page_Cards;
 pub mod Page_Chips;
 pub mod Page_Dialogs;
@@ -31,7 +33,9 @@ use material3_gpui::prelude::*;
 /// 页面集合：根视图持有并按导航切换。
 #[derive(Clone)]
 pub struct Pages {
+    pub additional: Entity<Page_Additional::AdditionalPage>,
     pub buttons: Entity<Page_Buttons::ButtonsPage>,
+    pub buttons_extended: Entity<Page_ButtonsExtended::ButtonsExtendedPage>,
     pub icon_buttons_fab: Entity<Page_IconButtonsFab::IconButtonsFabPage>,
     pub selection: Entity<Page_Selection::SelectionPage>,
     pub chips: Entity<Page_Chips::ChipsPage>,
@@ -51,7 +55,9 @@ impl Pages {
     /// 创建全部页面视图（组件实体在各页面构造函数中只创建一次）。
     pub fn new(cx: &mut App) -> Self {
         Self {
+            additional: Page_Additional::AdditionalPage::new(cx),
             buttons: Page_Buttons::ButtonsPage::new(cx),
+            buttons_extended: Page_ButtonsExtended::ButtonsExtendedPage::new(cx),
             icon_buttons_fab: Page_IconButtonsFab::IconButtonsFabPage::new(cx),
             selection: Page_Selection::SelectionPage::new(cx),
             chips: Page_Chips::ChipsPage::new(cx),
@@ -71,7 +77,13 @@ impl Pages {
 
 /// m3fx 风格演示画廊:展示组垂直排列,组间距 18(对齐 m3fx `createGallery`)。
 pub(crate) fn gallery(groups: impl IntoIterator<Item = AnyElement>) -> impl IntoElement {
-    div().flex().flex_col().gap(px(18.)).children(groups)
+    div()
+        .w_full()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(px(18.))
+        .children(groups)
 }
 
 /// m3fx 风格展示组:粗体 14px 标题 + 圆角卡片(surface-container-low
@@ -84,6 +96,9 @@ pub(crate) fn showcase_group(
 ) -> AnyElement {
     let theme = cx.theme();
     div()
+        .w_full()
+        .min_w_0()
+        .flex_none()
         .flex()
         .flex_col()
         .gap(px(10.))
@@ -96,6 +111,8 @@ pub(crate) fn showcase_group(
         )
         .child(
             div()
+                .w_full()
+                .min_w_0()
                 .flex()
                 .flex_wrap()
                 .items_center()

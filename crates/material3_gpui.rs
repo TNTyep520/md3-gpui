@@ -41,13 +41,11 @@ pub mod assets;
 pub mod components;
 #[path = "Fonts.rs"]
 pub mod fonts;
-#[path = "Icon.rs"]
-pub mod icon;
+pub use components::icon;
 #[path = "Interaction.rs"]
 pub mod interaction;
 pub mod motion;
-#[path = "Overlay.rs"]
-pub mod overlay;
+pub use components::overlay;
 pub mod styles;
 pub mod theme;
 pub mod tokens;

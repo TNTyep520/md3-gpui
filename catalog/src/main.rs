@@ -49,6 +49,8 @@ impl<T, E: std::fmt::Display> LogErr<T> for Result<T, E> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PageId {
     Buttons,
+    Additional,
+    ButtonsExtended,
     IconButtonsFab,
     Selection,
     Chips,
@@ -72,7 +74,7 @@ pub(crate) struct PageMeta {
     pub(crate) icon: IconName,
 }
 
-pub(crate) const PAGES: [PageMeta; 14] = [
+pub(crate) const PAGES: [PageMeta; 16] = [
     PageMeta {
         id: PageId::Buttons,
         title: "Buttons",
@@ -80,10 +82,22 @@ pub(crate) const PAGES: [PageMeta; 14] = [
         icon: IconName::Add,
     },
     PageMeta {
+        id: PageId::Additional,
+        title: "More Material components",
+        subtitle: "Date/time pickers, search, progress, toolbar and navigation",
+        icon: IconName::Settings,
+    },
+    PageMeta {
         id: PageId::IconButtonsFab,
         title: "Icon buttons & FAB",
         subtitle: "Icon button variants and floating action button sizes",
         icon: IconName::Favorite,
+    },
+    PageMeta {
+        id: PageId::ButtonsExtended,
+        title: "Toggle & split buttons",
+        subtitle: "Toggle buttons, button groups, split buttons and exposed menus",
+        icon: IconName::MoreVert,
     },
     PageMeta {
         id: PageId::Selection,
@@ -324,6 +338,8 @@ impl Render for Catalog {
         // 当前页面视图（页面只在自身状态变化时重渲染）
         let page_view: AnyView = match self.page {
             PageId::Buttons => self.pages.buttons.clone().into(),
+            PageId::Additional => self.pages.additional.clone().into(),
+            PageId::ButtonsExtended => self.pages.buttons_extended.clone().into(),
             PageId::IconButtonsFab => self.pages.icon_buttons_fab.clone().into(),
             PageId::Selection => self.pages.selection.clone().into(),
             PageId::Chips => self.pages.chips.clone().into(),
@@ -430,6 +446,7 @@ impl Render for Catalog {
         let content = div()
             .flex_1()
             .min_w_0()
+            .min_h_0()
             .h_full()
             .flex()
             .flex_col()
@@ -445,6 +462,8 @@ impl Render for Catalog {
                 div()
                     .id("catalog-content")
                     .flex_1()
+                    .min_w_0()
+                    .min_h_0()
                     .overflow_y_scroll()
                     .px(px(12.))
                     .pb(px(24.))

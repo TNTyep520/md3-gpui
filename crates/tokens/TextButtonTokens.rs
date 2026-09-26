@@ -1,0 +1,114 @@
+/*
+ * Copyright 2021 The Android Open Source Project
+ * Copyright 2022 The Android Open Source Project
+ * Copyright 2023 The Android Open Source Project
+ * Copyright 2024 The Android Open Source Project
+ * Copyright 2025 The Android Open Source Project
+ * Copyright 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+use super::{ColorSchemeKeyTokens, ColorToken, TokenEntry, TokenValue};
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TextButtonTokens;
+impl TextButtonTokens {
+    pub const DISABLED_CONTAINER_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE;
+    pub const DISABLED_CONTAINER_OPACITY: f32 = 0.1;
+    pub const DISABLED_ICON_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const DISABLED_ICON_OPACITY: f32 = 0.38;
+    pub const DISABLED_LABEL_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const DISABLED_LABEL_OPACITY: f32 = 0.38;
+    pub const FOCUSED_ICON_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const FOCUSED_LABEL_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const HOVERED_ICON_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const HOVERED_LABEL_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const ICON_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const LABEL_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const PRESSED_ICON_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+    pub const PRESSED_LABEL_COLOR: ColorToken = ColorSchemeKeyTokens::ON_SURFACE_VARIANT;
+}
+impl TextButtonTokens {
+    pub(super) const ENTRIES: &'static [TokenEntry] = &[
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "DisabledContainerColor",
+            value: TokenValue::ColorRole(TextButtonTokens::DISABLED_CONTAINER_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "DisabledContainerOpacity",
+            value: TokenValue::Float(TextButtonTokens::DISABLED_CONTAINER_OPACITY),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "DisabledIconColor",
+            value: TokenValue::ColorRole(TextButtonTokens::DISABLED_ICON_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "DisabledIconOpacity",
+            value: TokenValue::Float(TextButtonTokens::DISABLED_ICON_OPACITY),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "DisabledLabelColor",
+            value: TokenValue::ColorRole(TextButtonTokens::DISABLED_LABEL_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "DisabledLabelOpacity",
+            value: TokenValue::Float(TextButtonTokens::DISABLED_LABEL_OPACITY),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "FocusedIconColor",
+            value: TokenValue::ColorRole(TextButtonTokens::FOCUSED_ICON_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "FocusedLabelColor",
+            value: TokenValue::ColorRole(TextButtonTokens::FOCUSED_LABEL_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "HoveredIconColor",
+            value: TokenValue::ColorRole(TextButtonTokens::HOVERED_ICON_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "HoveredLabelColor",
+            value: TokenValue::ColorRole(TextButtonTokens::HOVERED_LABEL_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "IconColor",
+            value: TokenValue::ColorRole(TextButtonTokens::ICON_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "LabelColor",
+            value: TokenValue::ColorRole(TextButtonTokens::LABEL_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "PressedIconColor",
+            value: TokenValue::ColorRole(TextButtonTokens::PRESSED_ICON_COLOR),
+        },
+        TokenEntry {
+            group: "TextButtonTokens",
+            name: "PressedLabelColor",
+            value: TokenValue::ColorRole(TextButtonTokens::PRESSED_LABEL_COLOR),
+        },
+    ];
+}

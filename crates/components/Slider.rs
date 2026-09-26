@@ -15,14 +15,43 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    App, AppContext as _, Bounds, Context, Entity, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render,
-    Styled, Window, canvas, div, px, relative,
+    App, AppContext as _, Bounds, Context, DispatchPhase, Entity, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Render, Styled, Window, canvas, div, px,
 };
 
-use crate::theme::{ActiveTheme, DISABLED_CONTENT_OPACITY};
+use crate::theme::ActiveTheme;
 
 type ChangeHandler = Rc<dyn Fn(f32, &mut Window, &mut App) + 'static>;
+
+const TRACK_GAP: f32 = 6.;
+
+fn value_at_position(
+    position: f32,
+    width: f32,
+    handle_width: f32,
+    min: f32,
+    max: f32,
+    step: Option<f32>,
+) -> Option<f32> {
+    let inset = handle_width / 2. + TRACK_GAP;
+    let travel = width - inset * 2.;
+    if !position.is_finite() || !travel.is_finite() || travel <= 0. {
+        return None;
+    }
+    let fraction = ((position - inset) / travel).clamp(0., 1.);
+    if fraction <= 0. {
+        return Some(min);
+    }
+    if fraction >= 1. {
+        return Some(max);
+    }
+    let mut value = min + fraction * (max - min);
+    if let Some(step) = step.filter(|step| step.is_finite() && *step > 0.) {
+        value = ((value - min) / step).round() * step + min;
+    }
+    Some(value.clamp(min, max))
+}
 
 /// MD3 滑块构建器（`.build(cx)` 产出 [`SliderState`]）。
 pub struct Slider {
@@ -113,18 +142,16 @@ impl SliderState {
     }
 
     fn update_from_x(&mut self, x: Pixels, window: &mut Window, cx: &mut Context<Self>) {
-        let width = f32::from(self.bounds.size.width);
-        if width <= 0. {
+        let Some(value) = value_at_position(
+            f32::from(x - self.bounds.origin.x),
+            f32::from(self.bounds.size.width),
+            cx.theme().component().slider.handle_width,
+            self.min,
+            self.max,
+            self.step,
+        ) else {
             return;
-        }
-        let rel = (f32::from(x) - f32::from(self.bounds.origin.x)) / width;
-        let mut value = self.min + rel.clamp(0., 1.) * (self.max - self.min);
-        if let Some(step) = self.step
-            && step > 0.
-        {
-            value = ((value - self.min) / step).round() * step + self.min;
-        }
-        let value = value.clamp(self.min, self.max);
+        };
         if (value - self.value).abs() > f32::EPSILON {
             self.value = value;
             if let Some(handler) = self.on_change.clone() {
@@ -145,6 +172,7 @@ impl SliderState {
         }
         self.dragging = true;
         self.update_from_x(event.position.x, window, cx);
+        cx.notify();
     }
 
     fn on_mouse_move(
@@ -158,8 +186,9 @@ impl SliderState {
         }
     }
 
-    fn on_mouse_up(&mut self, _event: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_mouse_up(&mut self, event: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
         if self.dragging {
+            self.update_from_x(event.position.x, window, cx);
             self.dragging = false;
             cx.notify();
         }
@@ -168,23 +197,13 @@ impl SliderState {
 
 impl Render for SliderState {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let colors = cx.theme().colors();
-        let state_layer = *cx.theme().state_layer();
-        let tokens = cx.theme().component().slider;
         let disabled = self.disabled;
+        let style = SliderStyle::resolve(cx.theme().token_set(), disabled);
         let fraction = self.fraction().clamp(0., 1.);
 
-        let active_color = if disabled {
-            colors.on_surface.opacity(DISABLED_CONTENT_OPACITY)
-        } else {
-            colors.primary
-        };
-        let inactive_color = if disabled {
-            colors.disabled_container(&state_layer)
-        } else {
-            colors.secondary_container
-        };
-        let handle_color = active_color;
+        let active_color = style.active_track;
+        let inactive_color = style.inactive_track;
+        let handle_color = style.handle;
 
         let entity = cx.entity();
 
@@ -192,10 +211,11 @@ impl Render for SliderState {
             .id("md3-slider")
             .relative()
             .w_full()
-            .h(px(44.))
+            .min_w_0()
+            .h(style.container_height)
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap(px(TRACK_GAP))
             .when(!disabled, |el| el.cursor_pointer())
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
@@ -204,10 +224,15 @@ impl Render for SliderState {
             // 活动轨道（允许收缩，避免手柄+间距造成溢出）
             .child(
                 div()
-                    .h(px(tokens.track_height))
-                    .w(relative(fraction))
-                    .rounded_tl(px(tokens.track_height / 2.))
-                    .rounded_bl(px(tokens.track_height / 2.))
+                    .h(style.track_height)
+                    .min_w_0()
+                    .flex_basis(px(0.))
+                    .map(|mut track| {
+                        track.style().flex_grow = Some(fraction);
+                        track
+                    })
+                    .rounded_tl(style.track_height / 2.)
+                    .rounded_bl(style.track_height / 2.)
                     .rounded_tr(px(2.))
                     .rounded_br(px(2.))
                     .bg(active_color),
@@ -215,8 +240,8 @@ impl Render for SliderState {
             // 手柄（4×44 竖条）
             .child(
                 div()
-                    .w(px(tokens.handle_width))
-                    .h(px(tokens.handle_height))
+                    .w(style.handle_size.0)
+                    .h(style.handle_size.1)
                     .flex_none()
                     .rounded_full()
                     .bg(handle_color),
@@ -224,17 +249,22 @@ impl Render for SliderState {
             // 非活动轨道
             .child(
                 div()
-                    .h(px(tokens.track_height))
-                    .flex_1()
+                    .h(style.track_height)
+                    .min_w_0()
+                    .flex_basis(px(0.))
+                    .map(|mut track| {
+                        track.style().flex_grow = Some(1. - fraction);
+                        track
+                    })
                     .rounded_tl(px(2.))
                     .rounded_bl(px(2.))
-                    .rounded_tr(px(tokens.track_height / 2.))
-                    .rounded_br(px(tokens.track_height / 2.))
+                    .rounded_tr(style.track_height / 2.)
+                    .rounded_br(style.track_height / 2.)
                     .bg(inactive_color),
             )
             // 捕获轨道 bounds，用于把鼠标 x 坐标映射为数值
             .child({
-                let entity = entity;
+                let entity = entity.clone();
                 canvas(
                     move |bounds, _window, cx| {
                         entity.update(cx, |this, _| this.bounds = bounds);
@@ -242,7 +272,90 @@ impl Render for SliderState {
                     |_bounds, _state, _window, _cx| {},
                 )
                 .absolute()
-                .size_full()
+                .inset_0()
             })
+            .when(self.dragging && !disabled, |element| {
+                element.child(
+                    canvas(
+                        |_, _, _| {},
+                        move |_, _, window, _| {
+                            let move_entity = entity.clone();
+                            window.on_mouse_event(
+                                move |event: &MouseMoveEvent, phase, window, cx| {
+                                    if phase == DispatchPhase::Bubble {
+                                        move_entity.update(cx, |state, cx| {
+                                            state.on_mouse_move(event, window, cx)
+                                        });
+                                    }
+                                },
+                            );
+                            window.on_mouse_event(
+                                move |event: &MouseUpEvent, phase, window, cx| {
+                                    if phase == DispatchPhase::Bubble
+                                        && event.button == MouseButton::Left
+                                    {
+                                        entity.update(cx, |state, cx| {
+                                            state.on_mouse_up(event, window, cx)
+                                        });
+                                    }
+                                },
+                            );
+                        },
+                    )
+                    .absolute()
+                    .inset_0(),
+                )
+            })
+    }
+}
+
+pub use appearance::SliderStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 Slider 样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct SliderStyle {
+        /// 活动轨道色。
+        pub active_track: Hsla,
+        /// 非活动轨道色。
+        pub inactive_track: Hsla,
+        /// 手柄色。
+        pub handle: Hsla,
+        /// 轨道高度。
+        pub track_height: Pixels,
+        /// 手柄宽/高。
+        pub handle_size: (Pixels, Pixels),
+        /// 轨道容器高。
+        pub container_height: Pixels,
+    }
+    impl SliderStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, disabled: bool) -> Self {
+            let colors = &tokens.colors;
+            let state = &tokens.state_layer;
+            let slider = &tokens.component.slider;
+            Self {
+                active_track: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.primary
+                },
+                inactive_track: if disabled {
+                    colors.disabled_container(state)
+                } else {
+                    colors.secondary_container
+                },
+                handle: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.primary
+                },
+                track_height: px(slider.track_height),
+                handle_size: (px(slider.handle_width), px(slider.handle_height)),
+                container_height: px(44.),
+            }
+        }
     }
 }

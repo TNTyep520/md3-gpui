@@ -94,9 +94,10 @@ impl RenderOnce for TopAppBar {
         let theme = cx.theme();
         let colors = theme.colors();
         let typography = theme.typography();
+        let style = TopAppBarStyle::resolve(theme.token_set());
 
         let (height, centered) = match self.variant {
-            TopAppBarVariant::Small => (px(64.), true),
+            TopAppBarVariant::Small => (style.height, true),
             TopAppBarVariant::Medium => (px(112.), false),
             TopAppBarVariant::Large => (px(152.), false),
         };
@@ -115,10 +116,9 @@ impl RenderOnce for TopAppBar {
             .gap(px(4.))
             .children(self.actions);
 
-        // Small:标题居中(label_large);Medium/Large:标题沉底靠左(headline)
         let title_element = match self.variant {
             TopAppBarVariant::Small => typography
-                .label_large
+                .title_large
                 .apply(div())
                 .text_color(colors.on_surface)
                 .truncate()
@@ -130,7 +130,7 @@ impl RenderOnce for TopAppBar {
                 .truncate()
                 .child(self.title),
             TopAppBarVariant::Large => typography
-                .headline_large
+                .headline_medium
                 .apply(div())
                 .text_color(colors.on_surface)
                 .truncate()
@@ -144,7 +144,7 @@ impl RenderOnce for TopAppBar {
             .flex_none()
             .flex()
             .flex_col()
-            .bg(colors.surface);
+            .bg(style.container_color);
 
         if centered {
             // Small:单行,前置 | 居中标题 | 动作
@@ -191,6 +191,45 @@ impl RenderOnce for TopAppBar {
                     .pb(px(12.))
                     .child(title_element),
             )
+        }
+    }
+}
+
+pub use appearance::TopAppBarStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// TopAppBar 样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct TopAppBarStyle {
+        /// 容器色。
+        pub container_color: Hsla,
+        /// 标题色。
+        pub title_color: Hsla,
+        /// 图标色。
+        pub icon_color: Hsla,
+        /// 高度。
+        pub height: Pixels,
+        /// 水平内边距。
+        pub horizontal_padding: Pixels,
+        /// 元素间距。
+        pub gap: Pixels,
+        /// 标题字型。
+        pub title: crate::theme::TypeStyle,
+    }
+    impl TopAppBarStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet) -> Self {
+            Self {
+                container_color: tokens.colors.surface,
+                title_color: tokens.colors.on_surface,
+                icon_color: tokens.colors.on_surface_variant,
+                height: px(64.),
+                horizontal_padding: px(16.),
+                gap: px(8.),
+                title: tokens.typography.title_large,
+            }
         }
     }
 }

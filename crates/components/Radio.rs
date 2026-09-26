@@ -19,7 +19,7 @@ use std::time::Instant;
 use gpui::{
     App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, StatefulInteractiveElement as _, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    prelude::FluentBuilder as _,
 };
 
 use crate::interaction::InteractiveSurface;
@@ -135,6 +135,7 @@ impl Render for RadioState {
         let state_layer = *theme.state_layer();
         let disabled = self.disabled;
         let p = self.progress.value() as f32;
+        let style = RadioStyle::resolve(theme.token_set(), disabled);
 
         let ring_color = if disabled {
             colors.disabled_content(&state_layer)
@@ -157,7 +158,7 @@ impl Render for RadioState {
         let entity = cx.entity();
         let base = div()
             .id(self.id.clone())
-            .size(px(40.))
+            .size(style.touch_target)
             .flex()
             .flex_none()
             .items_center()
@@ -186,7 +187,6 @@ impl Render for RadioState {
             let select_entity = entity;
             base.on_click(move |_event, window, cx| {
                 select_entity.update(cx, |state, cx| {
-                    // 可取消勾选：点击已选中的项切换为未选中
                     state.set_selected(!state.selected, window, cx);
                     if let Some(handler) = state.on_select.clone() {
                         handler(window, cx);
@@ -197,13 +197,13 @@ impl Render for RadioState {
 
         base.child(
             div()
-                .size(px(20.))
+                .size(style.ring_size)
                 .flex()
                 .flex_none()
                 .items_center()
                 .justify_center()
                 .rounded_full()
-                .border_2()
+                .border(style.border_width)
                 .border_color(if disabled {
                     ring_color
                 } else {
@@ -212,11 +212,73 @@ impl Render for RadioState {
                 .when(p > 0.0, |el| {
                     el.child(
                         div()
-                            .size(px(10. * p))
+                            .size(style.dot_size * p)
                             .rounded_full()
                             .bg(dot_color.opacity(p)),
                     )
                 }),
         )
+    }
+}
+
+pub use appearance::RadioStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 RadioButton 样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct RadioStyle {
+        /// 未选中外圈色。
+        pub ring_off: Hsla,
+        /// 选中外圈色。
+        pub ring_on: Hsla,
+        /// 内点色。
+        pub dot: Hsla,
+        /// 外圈直径。
+        pub ring_size: Pixels,
+        /// 边框宽度。
+        pub border_width: Pixels,
+        /// 内点直径。
+        pub dot_size: Pixels,
+        /// 触摸目标边长。
+        pub touch_target: Pixels,
+        /// 状态层基色。
+        pub state_layer_color: Hsla,
+        /// 按压档状态层不透明度。
+        pub state_layer_opacity: f32,
+        /// 禁用态内容色。
+        pub disabled_content: Hsla,
+    }
+    impl RadioStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, disabled: bool) -> Self {
+            let colors = &tokens.colors;
+            let state = &tokens.state_layer;
+            Self {
+                ring_off: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.on_surface_variant
+                },
+                ring_on: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.primary
+                },
+                dot: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.primary
+                },
+                ring_size: px(20.),
+                border_width: px(2.),
+                dot_size: px(10.),
+                touch_target: px(40.),
+                state_layer_color: colors.primary,
+                state_layer_opacity: state.pressed,
+                disabled_content: colors.disabled_content(state),
+            }
+        }
     }
 }

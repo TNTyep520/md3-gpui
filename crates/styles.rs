@@ -1,54 +1,90 @@
-//! 组件样式（Component Styles）。
-//!
-//! 架构对齐 [m3fx](https://github.com/Glavo/m3fx) 的
-//! `styles/controls/*.css`（Apache-2.0，© 2026 Glavo）：每个控件的
-//! 全部可样式化值（几何、圆角、内边距、各状态颜色、字型、elevation）
-//! 集中在一个 `XxxStyle` 结构体中，默认值由 [`TokenSet`](crate::theme::TokenSet)
-//! 推导（等价于 m3fx 的 UA stylesheet），组件 render 只消费 Style。
-//!
-//! 实例级覆盖（等价于 m3fx 的 styleable properties / 用户 CSS）：
-//! 组件 builder 提供 `.style(|s| { s.container_color = …; })`。
-//!
-//! ```ignore
-//! Button::new("hi", "Hi")
-//!     .style(|s: &mut ButtonStyle| s.container_color = Some(colors.tertiary))
-//!     .build(cx)
-//! ```
+pub mod button {
+    pub use crate::components::ButtonStyle;
+    pub use crate::components::ButtonVariant;
+    pub use crate::components::IconButtonStyle;
+    pub use crate::components::IconButtonVariant;
+}
 
-#[path = "styles/Button.rs"]
-pub mod button;
-#[path = "styles/Chip.rs"]
-pub mod chip;
-#[path = "styles/Container.rs"]
-pub mod container;
-#[path = "styles/Fab.rs"]
-pub mod fab;
-#[path = "styles/Input.rs"]
-pub mod input;
-#[path = "styles/Navigation.rs"]
-pub mod navigation;
-#[path = "styles/Overlay.rs"]
-pub mod overlay;
-#[path = "styles/Progress.rs"]
-pub mod progress;
-#[path = "styles/SegmentedButton.rs"]
-pub mod segmented_button;
-#[path = "styles/Selection.rs"]
-pub mod selection;
-#[path = "styles/Tabs.rs"]
-pub mod tabs;
+pub mod chip {
+    pub use crate::components::ChipStyle;
+    pub use crate::components::ChipVariant;
+}
 
-pub use button::{ButtonStyle, IconButtonStyle};
-pub use chip::ChipStyle;
-pub use container::{CardStyle, DialogStyle, DividerStyle, ListItemStyle};
-pub use fab::FabStyle;
-pub use input::TextFieldStyle;
-pub use navigation::{
-    NavigationBarStyle, NavigationDrawerStyle, NavigationItemStyle, NavigationRailStyle,
-    TopAppBarStyle,
-};
-pub use overlay::{MenuStyle, SnackbarStyle, TooltipStyle};
-pub use progress::{CircularProgressStyle, LinearProgressStyle};
-pub use segmented_button::SegmentedButtonStyle;
-pub use selection::{CheckboxStyle, RadioStyle, SliderStyle, SwitchStyle};
-pub use tabs::TabBarStyle;
+pub mod container {
+    pub use crate::components::CardStyle;
+    pub use crate::components::CardVariant;
+    pub use crate::components::DialogStyle;
+    pub use crate::components::DividerStyle;
+    pub use crate::components::ListItemStyle;
+}
+
+pub mod fab {
+    pub use crate::components::FabColor;
+    pub use crate::components::FabSize;
+    pub use crate::components::FabStyle;
+}
+
+pub mod input {
+    pub use crate::components::TextFieldStyle;
+}
+
+pub mod navigation {
+    pub use crate::components::NavigationBarStyle;
+    pub use crate::components::NavigationDrawerStyle;
+    pub use crate::components::NavigationItemStyle;
+    pub use crate::components::NavigationRailStyle;
+    pub use crate::components::TopAppBarStyle;
+}
+
+pub mod overlay {
+    pub use crate::components::MenuStyle;
+    pub use crate::components::SnackbarStyle;
+    pub use crate::components::TooltipStyle;
+}
+
+pub mod progress {
+    pub use crate::components::CircularProgressStyle;
+    pub use crate::components::LinearProgressStyle;
+}
+
+pub mod segmented_button {
+    pub use crate::components::SegmentedButtonStyle;
+}
+
+pub mod selection {
+    pub use crate::components::CheckboxStyle;
+    pub use crate::components::RadioStyle;
+    pub use crate::components::SliderStyle;
+    pub use crate::components::SwitchStyle;
+}
+
+pub mod tabs {
+    pub use crate::components::TabBarStyle;
+}
+
+pub use crate::components::ButtonStyle;
+pub use crate::components::CardStyle;
+pub use crate::components::CheckboxStyle;
+pub use crate::components::ChipStyle;
+pub use crate::components::CircularProgressStyle;
+pub use crate::components::DialogStyle;
+pub use crate::components::DividerStyle;
+pub use crate::components::FabStyle;
+pub use crate::components::IconButtonStyle;
+pub use crate::components::LinearProgressStyle;
+pub use crate::components::ListItemStyle;
+pub use crate::components::MenuStyle;
+pub use crate::components::NavigationBarStyle;
+pub use crate::components::NavigationDrawerStyle;
+pub use crate::components::NavigationItemStyle;
+pub use crate::components::NavigationRailStyle;
+pub use crate::components::RadioStyle;
+pub use crate::components::SegmentedButtonStyle;
+pub use crate::components::SliderStyle;
+pub use crate::components::SnackbarStyle;
+pub use crate::components::SwitchStyle;
+pub use crate::components::TabBarStyle;
+pub use crate::components::TextFieldStyle;
+pub use crate::components::TooltipStyle;
+pub use crate::components::TopAppBarStyle;
+pub use crate::components::{BadgeStyle, BottomSheetStyle};

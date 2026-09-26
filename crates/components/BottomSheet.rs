@@ -14,12 +14,44 @@
 //! ```
 
 use gpui::{
-    AnyElement, App, ElementId, IntoElement, ParentElement as _, RenderOnce, Window, anchored,
-    deferred, div, point, prelude::*, px,
+    AnyElement, App, ElementId, Hsla, IntoElement, ParentElement as _, Pixels, RenderOnce, Window,
+    anchored, deferred, div, point, prelude::*, px,
 };
 use std::rc::Rc;
 
 use crate::prelude::ActiveTheme;
+use crate::theme::TokenSet;
+use crate::tokens::{ScrimTokens, SheetBottomTokens};
+
+#[derive(Clone, Copy, Debug)]
+pub struct BottomSheetStyle {
+    pub container_color: Hsla,
+    pub content_color: Hsla,
+    pub scrim_color: Hsla,
+    pub handle_color: Hsla,
+    pub handle_size: (Pixels, Pixels),
+    pub corner_radius: Pixels,
+    pub max_width: Pixels,
+}
+
+impl BottomSheetStyle {
+    pub fn resolve(tokens: &TokenSet) -> Self {
+        Self {
+            container_color: SheetBottomTokens::DOCKED_CONTAINER_COLOR.resolve(tokens),
+            content_color: tokens.colors.on_surface,
+            scrim_color: ScrimTokens::CONTAINER_COLOR
+                .resolve(tokens)
+                .opacity(ScrimTokens::CONTAINER_OPACITY),
+            handle_color: SheetBottomTokens::DOCKED_DRAG_HANDLE_COLOR.resolve(tokens),
+            handle_size: (
+                SheetBottomTokens::DOCKED_DRAG_HANDLE_WIDTH.pixels(),
+                SheetBottomTokens::DOCKED_DRAG_HANDLE_HEIGHT.pixels(),
+            ),
+            corner_radius: tokens.shapes.extra_large,
+            max_width: px(640.),
+        }
+    }
+}
 
 type DismissHandler = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 
@@ -64,18 +96,20 @@ impl ParentElement for ModalBottomSheet {
 impl RenderOnce for ModalBottomSheet {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let colors = theme.colors();
+        let style = BottomSheetStyle::resolve(theme.token_set());
         let viewport = _window.viewport_size();
 
         let sheet = div()
             .id(self.id.clone())
             .w_full()
+            .max_w(style.max_width)
+            .on_click(|_, _, cx| cx.stop_propagation())
             .max_h(viewport.height * 0.8)
             .flex()
             .flex_col()
-            .rounded(theme.shapes().extra_large)
+            .rounded(style.corner_radius)
             .rounded_b_none()
-            .bg(colors.surface_container_low)
+            .bg(style.container_color)
             .px(px(16.))
             .pt(px(6.))
             .pb(px(24.))
@@ -84,10 +118,10 @@ impl RenderOnce for ModalBottomSheet {
                 el.child(
                     div().flex().justify_center().child(
                         div()
-                            .w(px(32.))
-                            .h(px(4.))
+                            .w(style.handle_size.0)
+                            .h(style.handle_size.1)
                             .rounded_full()
-                            .bg(colors.on_surface_variant.opacity(0.4)),
+                            .bg(style.handle_color),
                     ),
                 )
             })
@@ -98,7 +132,7 @@ impl RenderOnce for ModalBottomSheet {
                     .flex_col()
                     .gap(px(8.))
                     .overflow_y_scroll()
-                    .text_color(colors.on_surface)
+                    .text_color(style.content_color)
                     .children(self.children),
             );
 
@@ -109,7 +143,8 @@ impl RenderOnce for ModalBottomSheet {
             .h(viewport.height)
             .flex()
             .items_end()
-            .bg(colors.scrim.opacity(0.32))
+            .justify_center()
+            .bg(style.scrim_color)
             .when_some(self.on_dismiss, |el, handler| {
                 el.on_click(move |_, window, cx| handler(window, cx))
             })

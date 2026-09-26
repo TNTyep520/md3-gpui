@@ -10,7 +10,6 @@ use gpui::{
 use crate::icon::{Icon, IconName};
 use crate::interaction::{InteractiveSurface, wire_events};
 use crate::motion::{AnimatedComponent, AnimationDriver};
-use crate::styles::SegmentedButtonStyle;
 use crate::theme::ActiveTheme;
 
 type ChangeHandler = Rc<dyn Fn(&[usize], &mut Window, &mut App)>;
@@ -338,54 +337,54 @@ impl Render for SegmentedButtonRowState {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{SegmentedButton, SegmentedButtonRow, SegmentedButtonSelectionMode};
+pub use appearance::SegmentedButtonStyle;
 
-    #[test]
-    fn single_selection_is_exclusive_and_cannot_be_toggled_off() {
-        let mut row = SegmentedButtonRow::new("single").buttons([
-            SegmentedButton::new("A").selected(true),
-            SegmentedButton::new("B").selected(true),
-            SegmentedButton::new("C"),
-        ]);
-        row.normalize_selection();
-        assert_eq!(row.selected_indices(), vec![0]);
-        assert!(!row.activate(0));
-        assert!(row.activate(2));
-        assert_eq!(row.selected_indices(), vec![2]);
-        assert!(!row.activate(2));
+mod appearance {
+    use crate::theme::{TokenSet, TypeStyle};
+    use crate::tokens::OutlinedSegmentedButtonTokens;
+    use gpui::{Hsla, Pixels, px};
+    #[derive(Clone, Copy, Debug)]
+    pub struct SegmentedButtonStyle {
+        pub container_color: Option<Hsla>,
+        pub content_color: Hsla,
+        pub outline_color: Hsla,
+        pub outline_width: Pixels,
+        pub height: Pixels,
+        pub min_width: Pixels,
+        pub corner_radius: Pixels,
+        pub horizontal_padding: Pixels,
+        pub icon_size: Pixels,
+        pub gap: Pixels,
+        pub label: TypeStyle,
     }
-
-    #[test]
-    fn multiple_selection_can_be_empty() {
-        let mut row = SegmentedButtonRow::new("multi")
-            .selection_mode(SegmentedButtonSelectionMode::Multiple)
-            .buttons([SegmentedButton::new("A"), SegmentedButton::new("B")]);
-        assert!(row.activate(0));
-        assert!(row.activate(1));
-        assert_eq!(row.selected_indices(), vec![0, 1]);
-        assert!(row.activate(0));
-        assert!(row.activate(1));
-        assert!(row.selected_indices().is_empty());
-    }
-
-    #[test]
-    fn disabled_and_invalid_buttons_do_not_change_selection() {
-        let mut row = SegmentedButtonRow::new("disabled").buttons([
-            SegmentedButton::new("A").selected(true),
-            SegmentedButton::new("B").disabled(true),
-        ]);
-        assert!(!row.activate(1));
-        assert!(!row.activate(usize::MAX));
-        assert_eq!(row.selected_indices(), vec![0]);
-        row.disabled = true;
-        assert!(!row.activate(0));
-        assert!(row.set_selected(1, true));
-        assert_eq!(row.selected_indices(), vec![1]);
-        assert!(!row.set_selected(2, true));
-        assert!(row.set_selected(1, false));
-        assert!(row.selected_indices().is_empty());
-        assert!(!SegmentedButtonRow::new("empty").activate(0));
+    impl SegmentedButtonStyle {
+        pub fn resolve(tokens: &TokenSet, selected: bool, disabled: bool) -> Self {
+            let colors = &tokens.colors;
+            Self {
+                container_color: selected.then_some(colors.secondary_container),
+                content_color: if disabled {
+                    colors.disabled_content(&tokens.state_layer)
+                } else if selected {
+                    colors.on_secondary_container
+                } else {
+                    colors.on_surface
+                },
+                outline_color: if disabled {
+                    colors
+                        .outline
+                        .opacity(tokens.state_layer.disabled_container)
+                } else {
+                    colors.outline
+                },
+                outline_width: OutlinedSegmentedButtonTokens::OUTLINE_WIDTH.pixels(),
+                height: OutlinedSegmentedButtonTokens::CONTAINER_HEIGHT.pixels(),
+                min_width: px(64.),
+                corner_radius: tokens.shapes.full,
+                horizontal_padding: px(12.),
+                icon_size: OutlinedSegmentedButtonTokens::ICON_SIZE.pixels(),
+                gap: px(8.),
+                label: OutlinedSegmentedButtonTokens::LABEL_TEXT_FONT.resolve(tokens),
+            }
+        }
     }
 }

@@ -164,15 +164,19 @@ impl Render for TabBarState {
         let selected = self.selected;
         let on_change = self.on_change.clone();
         let entity = cx.entity();
-        let label_style = theme.typography().title_small;
+        let style = TabBarStyle::resolve(
+            theme.token_set(),
+            self.tabs.iter().any(|tab| tab.icon.is_some()),
+        );
+        let label_style = style.label;
         let has_icons = self.tabs.iter().any(|t| t.icon.is_some());
-        let height = if has_icons { px(64.) } else { px(48.) };
+        let height = style.bar_height(has_icons);
         let indicator_pos = self.indicator.value() as f32;
 
-        let primary = colors.primary;
-        let on_surface_variant = colors.on_surface_variant;
-        let surface = colors.surface;
-        let outline_variant = colors.outline_variant;
+        let primary = style.selected_item_color;
+        let on_surface_variant = style.unselected_item_color;
+        let surface = style.container_color;
+        let outline_variant = style.divider_color;
 
         div()
             .id(self.id.clone())
@@ -205,7 +209,7 @@ impl Render for TabBarState {
                     .flex_col()
                     .items_center()
                     .justify_center()
-                    .gap(px(4.))
+                    .gap(style.gap)
                     .cursor_pointer()
                     .text_color(fg)
                     .hover(move |s| s.bg(layer.opacity(HOVER_OPACITY)))
@@ -221,7 +225,9 @@ impl Render for TabBarState {
                             }
                         });
                     })
-                    .when_some(tab.icon, |el, icon| el.child(Icon::new(icon).size(px(24.))));
+                    .when_some(tab.icon, |el, icon| {
+                        el.child(Icon::new(icon).size(style.icon_size))
+                    });
                 let tab_el = label_style.apply(tab_el).child(tab.label.clone());
                 // 选中指示条：3dp 高、圆角上边、宽度收窄。
                 // 画在选中标签内部并以弹簧位置做相对偏移
@@ -248,5 +254,73 @@ impl Render for TabBarState {
                     )
                 })
             }))
+    }
+}
+
+pub use appearance::TabBarStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 标签栏样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct TabBarStyle {
+        /// 栏背景色。
+        pub container_color: Hsla,
+        /// 底部分隔线色。
+        pub divider_color: Hsla,
+        /// 选中项内容色。
+        pub selected_item_color: Hsla,
+        /// 未选中项内容色。
+        pub unselected_item_color: Hsla,
+        /// 指示条颜色。
+        pub indicator_color: Hsla,
+        /// 指示条高/宽。
+        pub indicator_size: (Pixels, Pixels),
+        /// 无图标时栏高。
+        pub height: Pixels,
+        /// 带图标时栏高。
+        pub height_with_icon: Pixels,
+        /// 图标尺寸。
+        pub icon_size: Pixels,
+        /// 图标与文字间距。
+        pub gap: Pixels,
+        /// hover 状态层不透明度。
+        pub hover_opacity: f32,
+        /// 按压状态层不透明度。
+        pub pressed_opacity: f32,
+        /// 标签字型。
+        pub label: crate::theme::TypeStyle,
+    }
+    impl TabBarStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, _has_icons: bool) -> Self {
+            let colors = &tokens.colors;
+            Self {
+                container_color: colors.surface,
+                divider_color: colors.outline_variant,
+                selected_item_color: colors.primary,
+                unselected_item_color: colors.on_surface_variant,
+                indicator_color: colors.primary,
+                indicator_size: (px(3.), px(48.)),
+                height: px(48.),
+                height_with_icon: px(64.),
+                icon_size: px(24.),
+                gap: px(4.),
+                hover_opacity: crate::theme::HOVER_OPACITY,
+                pressed_opacity: crate::theme::PRESSED_OPACITY,
+                label: tokens.typography.label_large,
+            }
+        }
+    }
+    impl TabBarStyle {
+        /// 当前使用的栏高。
+        pub fn bar_height(&self, has_icons: bool) -> Pixels {
+            if has_icons {
+                self.height_with_icon
+            } else {
+                self.height
+            }
+        }
     }
 }

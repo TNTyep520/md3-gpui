@@ -19,7 +19,7 @@ use std::time::Instant;
 use gpui::{
     App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, StatefulInteractiveElement as _, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    prelude::FluentBuilder as _,
 };
 
 use crate::icon::{Icon, IconName};
@@ -146,6 +146,7 @@ impl Render for CheckboxState {
         let state_layer = *theme.state_layer();
         let disabled = self.disabled;
         let p = self.progress.value() as f32;
+        let style = CheckboxStyle::resolve(theme.token_set(), self.error, self.disabled);
 
         let accent = if self.error {
             colors.error
@@ -191,7 +192,7 @@ impl Render for CheckboxState {
         let entity = cx.entity();
         let base = div()
             .id(self.id.clone())
-            .size(px(40.))
+            .size(style.touch_target)
             .flex()
             .flex_none()
             .items_center()
@@ -231,21 +232,85 @@ impl Render for CheckboxState {
 
         base.child(
             div()
-                .size(px(18.))
+                .size(style.box_size)
                 .flex()
                 .flex_none()
                 .items_center()
                 .justify_center()
-                .rounded(px(2.))
+                .rounded(style.corner_radius)
                 .when_some(box_bg, |el, bg| el.bg(bg))
-                .when_some(box_border, |el, color| el.border_2().border_color(color))
+                .when_some(box_border, |el, color| {
+                    el.border(style.border_width).border_color(color)
+                })
                 .when_some(mark_color.filter(|_| p > 0.0), |el, color| {
                     el.child(
                         Icon::new(IconName::Check)
-                            .size(px(16.))
+                            .size(style.mark_size)
                             .color(color.opacity(p)),
                     )
                 }),
         )
+    }
+}
+
+pub use appearance::CheckboxStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 Checkbox 样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct CheckboxStyle {
+        /// 勾选填充色（error 态为 error 色）。
+        pub accent: Hsla,
+        /// 勾选图标准色。
+        pub on_accent: Hsla,
+        /// 未选中边框色。
+        pub outline: Hsla,
+        /// 方框边长。
+        pub box_size: Pixels,
+        /// 方框圆角。
+        pub corner_radius: Pixels,
+        /// 边框宽度。
+        pub border_width: Pixels,
+        /// 勾图标尺寸。
+        pub mark_size: Pixels,
+        /// 触摸目标边长。
+        pub touch_target: Pixels,
+        /// 状态层基色。
+        pub state_layer_color: Hsla,
+        /// 按压档状态层不透明度。
+        pub state_layer_opacity: f32,
+        /// 禁用态内容不透明度对应的颜色。
+        pub disabled_content: Hsla,
+    }
+    impl CheckboxStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, error: bool, disabled: bool) -> Self {
+            let colors = &tokens.colors;
+            let state = &tokens.state_layer;
+            let (accent, on_accent, outline) = if error {
+                (colors.error, colors.on_error, colors.error)
+            } else {
+                (colors.primary, colors.on_primary, colors.on_surface_variant)
+            };
+            Self {
+                accent,
+                on_accent,
+                outline,
+                box_size: px(18.),
+                corner_radius: px(2.),
+                border_width: px(2.),
+                mark_size: px(16.),
+                touch_target: px(40.),
+                state_layer_color: accent,
+                state_layer_opacity: state.pressed,
+                disabled_content: if disabled {
+                    colors.disabled_content(state)
+                } else {
+                    colors.on_surface
+                },
+            }
+        }
     }
 }

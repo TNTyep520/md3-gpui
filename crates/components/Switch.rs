@@ -29,7 +29,7 @@ use std::time::Instant;
 use gpui::{
     App, AppContext as _, Context, DispatchPhase, ElementId, Entity, Hsla, InteractiveElement as _,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Window, canvas, div,
+    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Window, canvas, div, point,
     prelude::FluentBuilder as _, px,
 };
 
@@ -202,8 +202,8 @@ impl SwitchState {
 
         let bounds = self.surface.bounds.get();
         let local_x = event.position.x - bounds.origin.x;
-        let center_x = px(TRACK_HEIGHT_LOCAL)
-            + px(TRACK_WIDTH_LOCAL - TRACK_HEIGHT_LOCAL) * self.progress.value() as f32;
+        let style = SwitchStyle::resolve(cx.theme().token_set(), self.disabled);
+        let center_x = thumb_center(style.track_size, self.progress.value() as f32);
         self.pressed = true;
         self.dragging = false;
         self.drag_start_x = event.position.x;
@@ -234,8 +234,13 @@ impl SwitchState {
         };
         let local_x = position.x - bounds.origin.x;
         let handle_center = local_x - self.grab_offset;
-        let pos = f32::from(handle_center - px(TRACK_HEIGHT_LOCAL))
-            / f32::from(px(TRACK_WIDTH_LOCAL - TRACK_HEIGHT_LOCAL));
+        let style = SwitchStyle::resolve(cx.theme().token_set(), self.disabled);
+        let travel = f32::from(style.track_size.0 - style.track_size.1);
+        let pos = if travel > 0. {
+            f32::from(handle_center - style.track_size.1 / 2.) / travel
+        } else {
+            0.
+        };
         let next = f64::from(pos.clamp(0.0, 1.0));
         // 位置变化不足半像素(20dp 行程上约 0.025)时不重绘
         let moved = (next - self.progress.value()).abs() >= 0.025 / 20.0;
@@ -278,9 +283,9 @@ impl SwitchState {
     }
 }
 
-/// 拖拽数学用的轨道尺寸(dp;与 CSS 令牌默认值一致)。
-const TRACK_WIDTH_LOCAL: f32 = 52.0;
-const TRACK_HEIGHT_LOCAL: f32 = 32.0;
+fn thumb_center(track_size: (Pixels, Pixels), progress: f32) -> Pixels {
+    track_size.1 / 2. + (track_size.0 - track_size.1) * progress.clamp(0., 1.)
+}
 
 impl AnimatedComponent for SwitchState {
     fn step(&mut self, now: Instant) -> bool {
@@ -318,7 +323,7 @@ impl Render for SwitchState {
         let theme = cx.theme();
         let colors = theme.colors();
         let disabled = self.disabled;
-        let style = crate::styles::selection::SwitchStyle::resolve(theme.token_set(), disabled);
+        let style = SwitchStyle::resolve(theme.token_set(), disabled);
         let state_layer = *theme.state_layer();
         let p = self.progress.value() as f32;
         let press = self.press_progress.value() as f32;
@@ -347,7 +352,7 @@ impl Render for SwitchState {
             style.thumb_off + (style.thumb_on - style.thumb_off) * p
         };
         let thumb_size = rest_size + (px(PRESSED_HANDLE_SIZE) - rest_size) * press;
-        let center_x = track_h / 2. + (track_w - track_h) * p;
+        let center_x = thumb_center(style.track_size, p);
         let thumb_x = center_x - thumb_size / 2.;
         let thumb_y = (px(TOUCH_TARGET_HEIGHT) - thumb_size) / 2.;
 
@@ -402,7 +407,7 @@ impl Render for SwitchState {
         let mut root = div()
             .id(self.id.clone())
             .relative()
-            .w(px(TRACK_WIDTH_LOCAL))
+            .w(track_w)
             .h(px(TOUCH_TARGET_HEIGHT))
             .flex_none()
             .when(!disabled, |el| el.cursor_pointer());
@@ -460,6 +465,8 @@ impl Render for SwitchState {
         // 涟漪(无界,20dp,按压点为心)+ 边界捕获
         if !disabled {
             let ripple_color = lerp_color(colors.on_surface, colors.primary, p);
+            self.surface
+                .set_ripple_origin(point(center_x, px(TOUCH_TARGET_HEIGHT / 2.)));
             root = self
                 .surface
                 .overlay_unclipped(ripple_color, state_layer.pressed)
@@ -516,5 +523,78 @@ impl Render for SwitchState {
             });
         }
         root.child(thumb)
+    }
+}
+
+pub use appearance::SwitchStyle;
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 Switch 样式（端点颜色 + 几何；进度插值在组件内完成）。
+    #[derive(Clone, Copy, Debug)]
+    pub struct SwitchStyle {
+        /// 未选中轨道色。
+        pub track_off: Hsla,
+        /// 选中轨道色。
+        pub track_on: Hsla,
+        /// 未选中手柄色。
+        pub handle_off: Hsla,
+        /// 选中手柄色。
+        pub handle_on: Hsla,
+        /// 未选中描边色（`None` 无描边）。
+        pub border_off: Option<Hsla>,
+        /// 轨道宽/高。
+        pub track_size: (Pixels, Pixels),
+        /// 选中手柄直径。
+        pub thumb_on: Pixels,
+        /// 未选中手柄直径。
+        pub thumb_off: Pixels,
+        /// 图标尺寸。
+        pub icon_size: Pixels,
+        /// 状态层基色。
+        pub state_layer_color: Hsla,
+        /// 按压档状态层不透明度。
+        pub state_layer_opacity: f32,
+    }
+    impl SwitchStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet, disabled: bool) -> Self {
+            let colors = &tokens.colors;
+            let state = &tokens.state_layer;
+            let switch = &tokens.component.switch;
+            if disabled {
+                Self {
+                    track_off: colors
+                        .surface_container_highest
+                        .opacity(state.disabled_container),
+                    track_on: colors.disabled_container(state),
+                    handle_off: colors.disabled_content(state),
+                    // m3fx:禁用选中拇指 = surface(不透明),图标用 on_surface@38%
+                    handle_on: colors.surface,
+                    border_off: Some(colors.disabled_container(state)),
+                    track_size: (px(switch.track_width), px(switch.track_height)),
+                    thumb_on: px(switch.thumb_size),
+                    thumb_off: px(switch.unselected_thumb_size),
+                    icon_size: px(switch.icon_size),
+                    state_layer_color: colors.on_surface,
+                    state_layer_opacity: state.pressed,
+                }
+            } else {
+                Self {
+                    track_off: colors.surface_container_highest,
+                    track_on: colors.primary,
+                    handle_off: colors.outline,
+                    handle_on: colors.on_primary,
+                    border_off: Some(colors.outline),
+                    track_size: (px(switch.track_width), px(switch.track_height)),
+                    thumb_on: px(switch.thumb_size),
+                    thumb_off: px(switch.unselected_thumb_size),
+                    icon_size: px(switch.icon_size),
+                    state_layer_color: colors.on_surface,
+                    state_layer_opacity: state.pressed,
+                }
+            }
+        }
     }
 }

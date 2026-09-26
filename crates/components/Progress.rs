@@ -40,15 +40,15 @@ impl LinearProgress {
 
 impl RenderOnce for LinearProgress {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let colors = cx.theme().colors();
-        let active = colors.primary;
-        let track = colors.surface_container_highest;
+        let style = LinearProgressStyle::resolve(cx.theme().token_set());
+        let active = style.active_color;
+        let track = style.track_color;
 
         let container = div()
             .id(self.id)
             .w_full()
-            .h(px(4.))
-            .rounded_full()
+            .h(style.height)
+            .rounded(style.corner_radius)
             .bg(track)
             .overflow_hidden();
 
@@ -103,7 +103,7 @@ impl Default for CircularProgress {
 
 impl RenderOnce for CircularProgress {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = cx.theme().colors().primary;
+        let color = CircularProgressStyle::resolve(cx.theme().token_set()).color;
         svg()
             .path(crate::assets::PROGRESS_ARC_SVG_PATH)
             .size(self.size)
@@ -113,5 +113,53 @@ impl RenderOnce for CircularProgress {
                 Animation::new(Duration::from_millis(1000)).repeat(),
                 |el, delta| el.with_transformation(Transformation::rotate(percentage(delta))),
             )
+    }
+}
+
+pub use appearance::{CircularProgressStyle, LinearProgressStyle};
+
+mod appearance {
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// 线性进度条样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct LinearProgressStyle {
+        /// 活动条颜色。
+        pub active_color: Hsla,
+        /// 轨道颜色。
+        pub track_color: Hsla,
+        /// 高度。
+        pub height: Pixels,
+        /// 圆角。
+        pub corner_radius: Pixels,
+    }
+    impl LinearProgressStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet) -> Self {
+            let colors = &tokens.colors;
+            Self {
+                active_color: colors.primary,
+                track_color: colors.secondary_container,
+                height: px(4.),
+                corner_radius: tokens.shapes.full,
+            }
+        }
+    }
+    /// 环形进度指示器样式。
+    #[derive(Clone, Copy, Debug)]
+    pub struct CircularProgressStyle {
+        /// 颜色。
+        pub color: Hsla,
+        /// 默认尺寸。
+        pub size: Pixels,
+    }
+    impl CircularProgressStyle {
+        /// 由令牌推导默认样式。
+        pub fn resolve(tokens: &TokenSet) -> Self {
+            Self {
+                color: tokens.colors.primary,
+                size: px(48.),
+            }
+        }
     }
 }

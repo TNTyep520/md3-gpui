@@ -19,7 +19,7 @@ use std::time::Instant;
 use gpui::{
     App, AppContext as _, ClickEvent, Context, ElementId, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, Render, StatefulInteractiveElement as _, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    prelude::FluentBuilder as _,
 };
 
 use crate::icon::{Icon, IconName};
@@ -162,32 +162,8 @@ impl Render for IconButtonState {
         let disabled = self.disabled;
         let selected = self.selected;
 
-        let (bg, fg, outlined) = match (self.variant, selected) {
-            (IconButtonVariant::Standard, false) => (None, colors.on_surface_variant, false),
-            (IconButtonVariant::Standard, true) => (None, colors.primary, false),
-            (IconButtonVariant::Filled, false) => (
-                Some(colors.surface_container_highest),
-                colors.primary,
-                false,
-            ),
-            (IconButtonVariant::Filled, true) => (Some(colors.primary), colors.on_primary, false),
-            (IconButtonVariant::FilledTonal, false) => (
-                Some(colors.surface_container_highest),
-                colors.on_surface_variant,
-                false,
-            ),
-            (IconButtonVariant::FilledTonal, true) => (
-                Some(colors.secondary_container),
-                colors.on_secondary_container,
-                false,
-            ),
-            (IconButtonVariant::Outlined, false) => (None, colors.on_surface_variant, true),
-            (IconButtonVariant::Outlined, true) => (
-                Some(colors.inverse_surface),
-                colors.inverse_on_surface,
-                false,
-            ),
-        };
+        let style = IconButtonStyle::resolve(theme.token_set(), self.variant, selected);
+        let (bg, fg) = (style.container_color, style.content_color);
 
         let fg = if disabled {
             colors.disabled_content(&state_layer)
@@ -202,7 +178,7 @@ impl Render for IconButtonState {
 
         let base = div()
             .id(self.id.clone())
-            .size(px(40.))
+            .size(style.size)
             .flex()
             .flex_none()
             .items_center()
@@ -210,11 +186,11 @@ impl Render for IconButtonState {
             .rounded_full()
             .text_color(fg)
             .when_some(bg, |el, bg_color| el.bg(bg_color))
-            .when(outlined, |el| {
+            .when_some(style.outline_color, |el, outline| {
                 el.border_1().border_color(if disabled {
-                    colors.disabled_content(&state_layer)
+                    colors.on_surface.opacity(state_layer.disabled_container)
                 } else {
-                    colors.outline
+                    outline
                 })
             })
             .when(!disabled, |el| el.cursor_pointer().overflow_hidden());
@@ -243,6 +219,84 @@ impl Render for IconButtonState {
             base
         };
 
-        base.child(Icon::new(self.icon).size(px(24.)))
+        base.child(Icon::new(self.icon).size(style.icon_size))
+    }
+}
+
+pub use appearance::IconButtonStyle;
+
+mod appearance {
+    use super::IconButtonVariant;
+    use crate::theme::TokenSet;
+    use gpui::{Hsla, Pixels, px};
+    /// MD3 图标按钮样式（对应 button.css 的 `.m3-icon-button` 段落）。
+    #[derive(Clone, Debug)]
+    pub struct IconButtonStyle {
+        /// 容器色（`None` 为透明）。
+        pub container_color: Option<Hsla>,
+        /// 图标色。
+        pub content_color: Hsla,
+        /// 描边色（`Some` 启用 1dp 描边）。
+        pub outline_color: Option<Hsla>,
+        /// 容器边长（正方形）。
+        pub size: Pixels,
+        /// 图标尺寸。
+        pub icon_size: Pixels,
+        /// 圆角（圆形）。
+        pub corner_radius: Pixels,
+        /// 状态层/涟漪基色。
+        pub state_layer_color: Hsla,
+        /// 按压档状态层不透明度。
+        pub state_layer_opacity: f32,
+        /// 禁用态内容色。
+        pub disabled_content_color: Hsla,
+    }
+    impl IconButtonStyle {
+        /// 由令牌推导默认样式。`selected` 为 toggle 选中态。
+        pub fn resolve(tokens: &TokenSet, variant: IconButtonVariant, selected: bool) -> Self {
+            let colors = &tokens.colors;
+            let state = &tokens.state_layer;
+
+            let (container, content, outline) = match (variant, selected) {
+                (IconButtonVariant::Standard, false) => (None, colors.on_surface_variant, None),
+                (IconButtonVariant::Standard, true) => (None, colors.primary, None),
+                (IconButtonVariant::Filled, false) => {
+                    (Some(colors.surface_container_highest), colors.primary, None)
+                }
+                (IconButtonVariant::Filled, true) => {
+                    (Some(colors.primary), colors.on_primary, None)
+                }
+                (IconButtonVariant::FilledTonal, false) => (
+                    Some(colors.surface_container_highest),
+                    colors.on_surface_variant,
+                    None,
+                ),
+                (IconButtonVariant::FilledTonal, true) => (
+                    Some(colors.secondary_container),
+                    colors.on_secondary_container,
+                    None,
+                ),
+                (IconButtonVariant::Outlined, false) => {
+                    (None, colors.on_surface_variant, Some(colors.outline))
+                }
+                (IconButtonVariant::Outlined, true) => (
+                    Some(colors.inverse_surface),
+                    colors.inverse_on_surface,
+                    None,
+                ),
+            };
+
+            Self {
+                container_color: container,
+                content_color: content,
+                outline_color: outline,
+                size: px(40.),
+                icon_size: px(24.),
+                corner_radius: tokens.shapes.full,
+                state_layer_color: content,
+                state_layer_opacity: state.pressed,
+                disabled_content_color: colors.disabled_content(state),
+            }
+        }
     }
 }

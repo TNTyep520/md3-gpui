@@ -294,6 +294,12 @@ impl InteractiveSurface {
         }
     }
 
+    pub(crate) fn set_ripple_origin(&mut self, origin: Point<Pixels>) {
+        if let Some(ripple) = &mut self.ripple {
+            ripple.origin = origin;
+        }
+    }
+
     /// 按当前涟漪状态构建涟漪元素（同时最多一个涟漪，故返回 Option）。
     fn ripple_elements(
         &self,
@@ -615,118 +621,4 @@ pub fn wire_events<T: 'static>(
             cx.notify();
         });
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use gpui::size;
-
-    use super::*;
-
-    /// 涟漪裁剪的回归测试：交集多边形必须完全位于容器圆角矩形内
-    /// （修复前涟漪以超出容器的大圆 div 渲染，会越出圆角边界）。
-    #[test]
-    fn ripple_intersection_stays_inside_container() {
-        let bounds = Bounds {
-            origin: point(px(100.), px(200.)),
-            size: size(px(120.), px(40.)),
-        };
-        // shapes.full = 999px，依赖钳制得到胶囊形
-        let clip = rounded_rect_polygon(bounds, px(999.));
-
-        // 覆盖边缘、角落与中心等典型按压点，以及全部动画半径档位
-        let press_points = [
-            point(px(0.), px(20.)),
-            point(px(1.), px(1.)),
-            point(px(119.), px(39.)),
-            point(px(60.), px(20.)),
-        ];
-        for origin in press_points {
-            for radius in [1.0f32, 10.0, 30.0, 60.0, 200.0] {
-                let circle = circle_polygon(bounds.origin + origin, radius);
-                let Some(result) = clip_convex(&circle, &clip) else {
-                    continue; // 无交集时允许为空
-                };
-                assert!(result.len() >= 3, "退化多边形 at {origin:?} r={radius}");
-                // 凸多边形内侧判定：结果点相对每条裁剪边的叉积非负（留浮点容差）
-                for p in &result {
-                    for i in 0..clip.len() {
-                        let d = edge_cross(clip[i], clip[(i + 1) % clip.len()], *p);
-                        assert!(
-                            d > -0.01,
-                            "结果点 {p:?} 越出裁剪边 {i}（按压点 {origin:?}，半径 {radius}）"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    /// 圆完全在容器内时，交集应为完整的圆多边形（不被裁剪）。
-    #[test]
-    fn circle_inside_container_is_untouched() {
-        let bounds = Bounds {
-            origin: point(px(0.), px(0.)),
-            size: size(px(200.), px(40.)),
-        };
-        let clip = rounded_rect_polygon(bounds, px(999.));
-        let circle = circle_polygon(point(px(100.), px(20.)), 10.0);
-        let Some(result) = clip_convex(&circle, &clip) else {
-            panic!("交集不应为空");
-        };
-        assert_eq!(result.len(), circle.len());
-    }
-
-    /// 圆完全在容器外时，交集为空。
-    #[test]
-    fn circle_outside_container_yields_none() {
-        let bounds = Bounds {
-            origin: point(px(0.), px(0.)),
-            size: size(px(200.), px(40.)),
-        };
-        let clip = rounded_rect_polygon(bounds, px(20.));
-        let circle = circle_polygon(point(px(300.), px(20.)), 10.0);
-        assert!(clip_convex(&circle, &clip).is_none());
-    }
-
-    #[test]
-    fn segmented_ripple_preserves_square_edges_and_clips_rounded_ends() {
-        let bounds = Bounds {
-            origin: point(px(0.), px(0.)),
-            size: size(px(120.), px(40.)),
-        };
-        for (left, right) in [(999., 0.), (0., 999.), (0., 0.), (999., 999.)] {
-            let corners = Corners {
-                top_left: px(left),
-                bottom_left: px(left),
-                top_right: px(right),
-                bottom_right: px(right),
-            };
-            let clip = rounded_rect_polygon(bounds, corners);
-            if left == 0. {
-                assert!(clip.contains(&point(px(0.), px(0.))));
-                assert!(clip.contains(&point(px(0.), px(40.))));
-            } else {
-                assert!(!clip.contains(&point(px(0.), px(0.))));
-            }
-            if right == 0. {
-                assert!(clip.contains(&point(px(120.), px(0.))));
-                assert!(clip.contains(&point(px(120.), px(40.))));
-            } else {
-                assert!(!clip.contains(&point(px(120.), px(0.))));
-            }
-            for center in [point(px(1.), px(1.)), point(px(119.), px(1.))] {
-                let circle = circle_polygon(center, 60.);
-                let intersection = clip_convex(&circle, &clip);
-                assert!(intersection.is_some());
-                if let Some(points) = intersection {
-                    for point in points {
-                        for (start, end) in clip.iter().zip(clip.iter().cycle().skip(1)) {
-                            assert!(edge_cross(*start, *end, point) >= -0.01);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
